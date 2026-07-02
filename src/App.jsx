@@ -66,7 +66,7 @@ function Spinner() {
 
 export default function DieselControl() {
   const [tab, setTab] = useState("dashboard");
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxV7yuVhzbczACzyDKOqw_H2sFgM2LmdWNbGydHbhIHEqwHr8VpV-PNs2r9_oqEi23/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxMLwUa1k9N5eFN6Qqcv6PEgla2pBJUr0GsfO2V2Pv1Sg2buQi0YEWE1hZ9rllfM6Xf/exec";
   const [scriptUrl, setScriptUrl] = useState(APPS_SCRIPT_URL);
   const [urlGuardada, setUrlGuardada] = useState(APPS_SCRIPT_URL);
   const [consumos, setConsumos] = useState([]);

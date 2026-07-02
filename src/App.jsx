@@ -77,7 +77,7 @@ export default function DieselControl() {
 
   const initialFc = {
     fecha: "", unidad: "", litros: "", trabajo: "", notas: "",
-    modoHoras: "horometro", horometroActual: "", horometroAnterior: "", horasDirectas: ""
+    modoHoras: "horometro", horometroActual: "", horometroAnterior: "", horasDirectas: "", naHoras: false
   };
   const [fc, setFc] = useState(initialFc);
   const [fe, setFe] = useState({ fecha: "", litros: "", proveedor: "", factura: "", notas: "" });
@@ -120,6 +120,7 @@ export default function DieselControl() {
 
   // ── Horómetro ──
   const horasCalculadas = useMemo(() => {
+    if (fc.naHoras) return "N/A";
     if (fc.modoHoras === "horometro") {
       const actual = parseFloat(fc.horometroActual);
       const anterior = parseFloat(fc.horometroAnterior);
@@ -150,7 +151,7 @@ export default function DieselControl() {
     consumos.forEach(c => {
       if (!map[c.unidad]) map[c.unidad] = { litros: 0, horas: 0, registros: 0 };
       map[c.unidad].litros += Number(c.litros);
-      map[c.unidad].horas += Number(c.horas);
+      if (c.horas !== "N/A") map[c.unidad].horas += Number(c.horas);
       map[c.unidad].registros += 1;
     });
     return Object.entries(map).map(([u, v]) => ({
@@ -165,7 +166,7 @@ export default function DieselControl() {
       if (c.trabajo && c.trabajo !== "Varios") {
         if (!map[c.trabajo]) map[c.trabajo] = { litros: 0, horas: 0 };
         map[c.trabajo].litros += Number(c.litros);
-        map[c.trabajo].horas += Number(c.horas);
+        if (c.horas !== "N/A") map[c.trabajo].horas += Number(c.horas);
       }
     });
     return Object.entries(map).map(([t, v]) => ({
@@ -177,10 +178,10 @@ export default function DieselControl() {
   // ── Guardar consumo ──
   async function addConsumo() {
     if (!fc.fecha || !fc.unidad || !fc.litros) { showMsg("⚠ Completa fecha, unidad y litros.", "warn"); return; }
-    if (horasCalculadas === null) { showMsg("⚠ Ingresa horómetro o horas correctamente.", "warn"); return; }
+    if (horasCalculadas === null) { showMsg("⚠ Ingresa horómetro, horas o marca N/A.", "warn"); return; }
     const nuevo = {
       id: Date.now(), fecha: fc.fecha, unidad: fc.unidad,
-      litros: Number(fc.litros), horas: horasCalculadas,
+      litros: Number(fc.litros), horas: horasCalculadas === "N/A" ? "N/A" : horasCalculadas,
       trabajo: fc.trabajo || "", notas: fc.notas,
       modoHoras: fc.modoHoras,
       horometroActual: fc.modoHoras === "horometro" ? Number(fc.horometroActual) : "",
@@ -486,20 +487,31 @@ export default function DieselControl() {
 
               {fc.unidad && (
                 <div className="mt-4 bg-zinc-800/60 border border-zinc-700 rounded p-4">
-                  <div className="flex items-center gap-4 mb-3">
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                     <p className="text-xs text-zinc-400 uppercase tracking-widest font-mono">Horas de trabajo</p>
-                    {tieneHorometro(fc.unidad) && (
-                      <div className="flex gap-2">
-                        {["horometro","directas"].map(m => (
-                          <button key={m} onClick={() => setFc(p => ({ ...p, modoHoras: m }))}
-                            className={`text-xs font-mono px-3 py-1 rounded border transition-all ${fc.modoHoras === m ? "bg-amber-500 border-amber-500 text-zinc-900 font-bold" : "bg-zinc-800 border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}>
-                            {m === "horometro" ? "Horómetro" : "Horas directas"}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    <div className="flex gap-2 flex-wrap">
+                      {tieneHorometro(fc.unidad) && !fc.naHoras && (
+                        <>
+                          {["horometro","directas"].map(m => (
+                            <button key={m} onClick={() => setFc(p => ({ ...p, modoHoras: m }))}
+                              className={`text-xs font-mono px-3 py-1 rounded border transition-all ${fc.modoHoras === m && !fc.naHoras ? "bg-amber-500 border-amber-500 text-zinc-900 font-bold" : "bg-zinc-800 border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}>
+                              {m === "horometro" ? "Horómetro" : "Horas directas"}
+                            </button>
+                          ))}
+                        </>
+                      )}
+                      <button
+                        onClick={() => setFc(p => ({ ...p, naHoras: !p.naHoras }))}
+                        className={`text-xs font-mono px-3 py-1 rounded border transition-all ${fc.naHoras ? "bg-zinc-500 border-zinc-400 text-zinc-900 font-bold" : "bg-zinc-800 border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}>
+                        N/A
+                      </button>
+                    </div>
                   </div>
-                  {fc.modoHoras === "horometro" ? (
+                  {fc.naHoras ? (
+                    <div className="px-3 py-2 bg-zinc-900 border border-zinc-600 rounded text-xs font-mono text-zinc-400">
+                      Horas marcadas como <strong className="text-zinc-300">N/A</strong> — no se calculará rendimiento L/hr para este registro.
+                    </div>
+                  ) : fc.modoHoras === "horometro" ? (
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className={labelCls}>Horómetro anterior</label>
@@ -514,7 +526,7 @@ export default function DieselControl() {
                         <input type="number" min="0" step="0.1" className={inputCls} placeholder="ej. 4528.5"
                           value={fc.horometroActual} onChange={e => setFc(p => ({ ...p, horometroActual: e.target.value }))} />
                       </div>
-                      {horasCalculadas !== null && (
+                      {horasCalculadas !== null && horasCalculadas !== "N/A" && (
                         <div className="col-span-2 px-3 py-2 bg-zinc-900 border border-amber-500/30 rounded text-xs font-mono text-amber-400">
                           Horas trabajadas: <strong>{horasCalculadas} hr</strong>
                         </div>
@@ -530,7 +542,7 @@ export default function DieselControl() {
                 </div>
               )}
 
-              {fc.litros && horasCalculadas !== null && horasCalculadas > 0 && (
+              {fc.litros && horasCalculadas !== null && horasCalculadas !== "N/A" && horasCalculadas > 0 && (
                 <div className="mt-3 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-xs font-mono text-amber-400">
                   Rendimiento estimado: <strong>{(Number(fc.litros) / horasCalculadas).toFixed(2)} L/hr</strong>
                   {fc.trabajo && <span className="text-zinc-500 ml-2">· {fc.trabajo}</span>}
@@ -571,7 +583,7 @@ export default function DieselControl() {
                               : <span className="text-zinc-700">—</span>}
                           </td>
                           <td className="py-2 pr-3 text-zinc-300">{c.horas} hr</td>
-                          <td className="py-2 pr-3"><Badge color={Number(c.litros/c.horas)<13?"green":Number(c.litros/c.horas)<16?"amber":"red"}>{(c.litros/c.horas).toFixed(1)} L/hr</Badge></td>
+                          <td className="py-2 pr-3">{c.horas === "N/A" ? <Badge color="gray">N/A</Badge> : <Badge color={Number(c.litros/c.horas)<13?"green":Number(c.litros/c.horas)<16?"amber":"red"}>{(c.litros/c.horas).toFixed(1)} L/hr</Badge>}</td>
                           <td className="py-2 pr-3">{c.trabajo ? <Badge color="blue">{c.trabajo}</Badge> : <Badge color="gray">—</Badge>}</td>
                           <td className="py-2">
                             <button onClick={() => delConsumo(c.id)} className="text-zinc-700 hover:text-red-400 transition-colors" title="Eliminar">✕</button>

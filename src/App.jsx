@@ -23,7 +23,20 @@ function tieneHorometro(u) { return CON_HOROMETRO.includes(u); }
 
 function formatDate(d) {
   if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d + "T12:00:00") : new Date(d);
+  let date;
+  if (typeof d === "number") {
+    // Google Sheets serial date number
+    date = new Date((d - 25569) * 86400 * 1000);
+  } else if (typeof d === "string") {
+    if (d.includes("T") || d.includes("-")) {
+      date = new Date(d.includes("T") ? d : d + "T12:00:00");
+    } else {
+      date = new Date(d);
+    }
+  } else {
+    date = new Date(d);
+  }
+  if (isNaN(date.getTime())) return String(d);
   return date.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 

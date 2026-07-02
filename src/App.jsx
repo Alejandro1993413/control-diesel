@@ -226,7 +226,7 @@ export default function DieselControl() {
     setFc(p => ({
       ...p, unidad,
       modoHoras: usaH ? "horometro" : "directas",
-      horometroAnterior: usaH && ultimoHorometro[unidad] ? String(ultimoHorometro[unidad]) : "",
+      horometroAnterior: "",
       horometroActual: "", horasDirectas: ""
     }));
   }
@@ -517,9 +517,7 @@ export default function DieselControl() {
                         <label className={labelCls}>Horómetro anterior</label>
                         <input type="number" min="0" step="0.1" className={inputCls} placeholder="ej. 4520.0"
                           value={fc.horometroAnterior} onChange={e => setFc(p => ({ ...p, horometroAnterior: e.target.value }))} />
-                        {ultimoHorometro[fc.unidad] && (
-                          <p className="text-xs text-zinc-600 mt-1 font-mono">Último: <span className="text-amber-400">{ultimoHorometro[fc.unidad]} hr</span></p>
-                        )}
+
                       </div>
                       <div>
                         <label className={labelCls}>Horómetro actual</label>

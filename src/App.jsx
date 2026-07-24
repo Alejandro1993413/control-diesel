@@ -10,7 +10,9 @@ const UNIDADES = [
   "Tractor #5", "Tractor #6", "Tractor #7",
   "Trilladora Lexion 560R", "Trilladora JD 9779 STS",
   "Torton Ford Rojo", "Torton Dina Gris",
-  "Torton Dina Rojo", "Torton Intl Blanco"
+  "Torton Dina Rojo", "Torton Intl Blanco",
+  "Piscadora John Deere 1", "Piscadora John Deere 2",
+  "Nissan Frontier 2022"
 ];
 
 const CON_HOROMETRO = [
@@ -480,6 +482,12 @@ export default function DieselControl() {
                     </optgroup>
                     <optgroup label="─── Tortons ───">
                       {UNIDADES.filter(u => u.startsWith("Torton")).map(u => <option key={u}>{u}</option>)}
+                    </optgroup>
+                    <optgroup label="─── Piscadoras ───">
+                      {UNIDADES.filter(u => u.startsWith("Piscadora")).map(u => <option key={u}>{u}</option>)}
+                    </optgroup>
+                    <optgroup label="─── Camionetas ───">
+                      {UNIDADES.filter(u => u.startsWith("Nissan")).map(u => <option key={u}>{u}</option>)}
                     </optgroup>
                   </select>
                 </div>

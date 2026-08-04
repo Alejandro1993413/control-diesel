@@ -4,7 +4,8 @@ const TRABAJOS = [
   "Rastreo", "Barbecho", "Zanjeo", "Cultivo liliston",
   "Cultivo zanjeadora", "Siembra", "Pisca algodon",
   "Trilla trigo", "Trilla Maiz", "Trilla Garbanzo",
-  "Tumba de bordos con arado", "Tumba de bordos con canalera", "Varios"
+  "Tumba de bordos con arado", "Tumba de bordos con canalera",
+  "Movimiento y compactacion modulador", "Varios"
 ];
 
 const UNIDADES = [
@@ -94,7 +95,7 @@ export default function DieselControl() {
 
   const initialFc = {
     fecha: "", unidad: "", litros: "", trabajo: "", notas: "",
-    modoHoras: "horometro", horometroActual: "", horometroAnterior: "", horasDirectas: "", naHoras: false
+    modoHoras: "horometro", horometroActual: "", horometroAnterior: "", horasDirectas: "", naHoras: false, kilometraje: ""
   };
   const [fc, setFc] = useState(initialFc);
   const [fe, setFe] = useState({ fecha: "", litros: "", proveedor: "", factura: "", notas: "" });
@@ -199,10 +200,11 @@ export default function DieselControl() {
     const nuevo = {
       id: Date.now(), fecha: fc.fecha, unidad: fc.unidad,
       litros: Number(fc.litros), horas: horasCalculadas === "N/A" ? "N/A" : horasCalculadas,
-      trabajo: fc.trabajo || "", notas: fc.notas,
+      trabajo: fc.trabajo || "", notas: fc.notas, kilometraje: fc.kilometraje || "",
       modoHoras: fc.modoHoras,
       horometroActual: fc.modoHoras === "horometro" ? Number(fc.horometroActual) : "",
       horometroAnterior: fc.modoHoras === "horometro" ? Number(fc.horometroAnterior) : "",
+      kilometraje: fc.kilometraje || "",
     };
     setConsumos(prev => [...prev, nuevo]);
     setFc(initialFc);
@@ -570,10 +572,17 @@ export default function DieselControl() {
                 </div>
               )}
 
-              <div className="mt-4">
-                <label className={labelCls}>Notas</label>
-                <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Observaciones opcionales..."
-                  value={fc.notas} onChange={e => setFc(p => ({ ...p, notas: e.target.value }))} />
+              <div className="mt-4 grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Kilometraje <span className="text-zinc-700 normal-case">(opcional)</span></label>
+                  <input type="number" min="0" className={inputCls} placeholder="ej. 45200"
+                    value={fc.kilometraje} onChange={e => setFc(p => ({ ...p, kilometraje: e.target.value }))} />
+                </div>
+                <div>
+                  <label className={labelCls}>Notas</label>
+                  <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Observaciones opcionales..."
+                    value={fc.notas} onChange={e => setFc(p => ({ ...p, notas: e.target.value }))} />
+                </div>
               </div>
               <button onClick={addConsumo}
                 className="mt-4 w-full bg-amber-500 hover:bg-amber-400 text-zinc-900 font-bold text-sm py-2.5 rounded font-mono uppercase tracking-widest transition-all">
@@ -606,6 +615,7 @@ export default function DieselControl() {
                           <td className="py-2 pr-3 text-zinc-300">{c.horas} hr</td>
                           <td className="py-2 pr-3">{c.horas === "N/A" ? <Badge color="gray">N/A</Badge> : <Badge color={Number(c.litros/c.horas)<13?"green":Number(c.litros/c.horas)<16?"amber":"red"}>{(c.litros/c.horas).toFixed(1)} L/hr</Badge>}</td>
                           <td className="py-2 pr-3">{c.trabajo ? <Badge color="blue">{c.trabajo}</Badge> : <Badge color="gray">—</Badge>}</td>
+                          <td className="py-2 pr-3 text-zinc-500">{c.kilometraje ? `${Number(c.kilometraje).toLocaleString()} km` : "—"}</td>
                           <td className="py-2">
                             <button onClick={() => delConsumo(c.id)} className="text-zinc-700 hover:text-red-400 transition-colors" title="Eliminar">✕</button>
                           </td>

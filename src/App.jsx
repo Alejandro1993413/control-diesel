@@ -3,7 +3,8 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 const TRABAJOS = [
   "Rastreo", "Barbecho", "Zanjeo", "Cultivo liliston",
   "Cultivo zanjeadora", "Siembra", "Pisca algodon",
-  "Trilla trigo", "Trilla Maiz", "Trilla Garbanzo", "Varios"
+  "Trilla trigo", "Trilla Maiz", "Trilla Garbanzo",
+  "Tumba de bordos con arado", "Tumba de bordos con canalera", "Varios"
 ];
 
 const UNIDADES = [

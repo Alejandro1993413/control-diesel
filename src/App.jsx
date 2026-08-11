@@ -9,12 +9,12 @@ const TRABAJOS = [
 ];
 
 const UNIDADES = [
-  "Tractor #1", "Tractor #2", "Tractor #3", "Tractor #4",
-  "Tractor #5", "Tractor #6", "Tractor #7",
-  "Trilladora Lexion 560R", "Trilladora JD 9779 STS",
-  "Torton Ford Rojo", "Torton Dina Gris",
-  "Torton Dina Rojo", "Torton Intl Blanco",
-  "Piscadora John Deere 1", "Piscadora John Deere 2",
+  "Tractor #1","Tractor #2","Tractor #3","Tractor #4",
+  "Tractor #5","Tractor #6","Tractor #7",
+  "Trilladora Lexion 560R","Trilladora JD 9779 STS",
+  "Torton Ford Rojo","Torton Dina Gris",
+  "Torton Dina Rojo","Torton Intl Blanco",
+  "Piscadora John Deere 1","Piscadora John Deere 2",
   "Nissan Frontier 2022"
 ];
 
@@ -24,69 +24,49 @@ const CON_HOROMETRO = [
   "Trilladora Lexion 560R","Trilladora JD 9779 STS"
 ];
 
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxMLwUa1k9N5eFN6Qqcv6PEgla2pBJUr0GsfO2V2Pv1Sg2buQi0YEWE1hZ9rllfM6Xf/exec";
+
 function tieneHorometro(u) { return CON_HOROMETRO.includes(u); }
 
 function formatDate(d) {
   if (!d) return "—";
   let date;
-  if (typeof d === "number") {
-    // Google Sheets serial date number
-    date = new Date((d - 25569) * 86400 * 1000);
-  } else if (typeof d === "string") {
-    if (d.includes("T") || d.includes("-")) {
-      date = new Date(d.includes("T") ? d : d + "T12:00:00");
-    } else {
-      date = new Date(d);
-    }
-  } else {
-    date = new Date(d);
-  }
+  if (typeof d === "number") date = new Date((d - 25569) * 86400 * 1000);
+  else if (typeof d === "string") date = new Date(d.includes("T") ? d : d + "T12:00:00");
+  else date = new Date(d);
   if (isNaN(date.getTime())) return String(d);
   return date.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function Badge({ color, children }) {
-  const c = {
-    green: "bg-emerald-900/60 text-emerald-300 border border-emerald-700",
-    red:   "bg-red-900/60 text-red-300 border border-red-700",
-    amber: "bg-amber-900/60 text-amber-300 border border-amber-700",
-    blue:  "bg-blue-900/60 text-blue-300 border border-blue-700",
-    gray:  "bg-zinc-800 text-zinc-400 border border-zinc-700",
-  };
-  return <span className={`text-xs font-mono px-2 py-0.5 rounded ${c[color]}`}>{children}</span>;
+function lphColor(lph) {
+  const v = Number(lph);
+  if (isNaN(v)) return "#71717a";
+  if (v < 13) return "#10b981";
+  if (v < 16) return "#f59e0b";
+  return "#ef4444";
 }
 
-function StatCard({ label, value, sub, accent }) {
-  const a = {
-    green: "border-emerald-500 text-emerald-400",
-    red:   "border-red-500 text-red-400",
-    amber: "border-amber-500 text-amber-400",
-    blue:  "border-blue-500 text-blue-400",
-  };
+function LphBadge({ lph }) {
+  if (!lph || lph === "-") return <span style={{ color: "#71717a", fontSize: 11 }}>—</span>;
+  const color = lphColor(lph);
   return (
-    <div className={`bg-zinc-900 border border-zinc-800 border-l-2 ${a[accent]} rounded p-4`}>
-      <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1 font-mono">{label}</p>
-      <p className={`text-2xl font-bold font-mono ${a[accent].split(" ")[1]}`}>{value}</p>
-      {sub && <p className="text-xs text-zinc-600 mt-1 font-mono">{sub}</p>}
-    </div>
+    <span style={{ background: color + "20", color, border: `1px solid ${color}50`, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+      {lph} L/hr
+    </span>
   );
 }
 
-// ── Spinner ──
-function Spinner() {
+function WorkBadge({ trabajo }) {
+  if (!trabajo) return <span style={{ color: "#52525b", fontSize: 11 }}>—</span>;
   return (
-    <div className="flex items-center gap-2 text-xs font-mono text-zinc-500">
-      <div className="w-3 h-3 border border-amber-500 border-t-transparent rounded-full animate-spin" />
-      Sincronizando...
-    </div>
+    <span style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #1d4ed820", borderRadius: 6, padding: "2px 8px", fontSize: 11 }}>
+      {trabajo}
+    </span>
   );
 }
 
 export default function DieselControl() {
   const [tab, setTab] = useState("dashboard");
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxMLwUa1k9N5eFN6Qqcv6PEgla2pBJUr0GsfO2V2Pv1Sg2buQi0YEWE1hZ9rllfM6Xf/exec";
-  const [scriptUrl, setScriptUrl] = useState(APPS_SCRIPT_URL);
-  const [urlGuardada, setUrlGuardada] = useState(APPS_SCRIPT_URL);
   const [consumos, setConsumos] = useState([]);
   const [entradas, setEntradas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -95,53 +75,43 @@ export default function DieselControl() {
 
   const initialFc = {
     fecha: "", unidad: "", litros: "", trabajo: "", notas: "",
-    modoHoras: "horometro", horometroActual: "", horometroAnterior: "", horasDirectas: "", naHoras: false, kilometraje: ""
+    modoHoras: "horometro", horometroActual: "", horometroAnterior: "",
+    horasDirectas: "", naHoras: false, kilometraje: ""
   };
   const [fc, setFc] = useState(initialFc);
   const [fe, setFe] = useState({ fecha: "", litros: "", proveedor: "", factura: "", notas: "" });
 
-  // ── Helpers de mensaje ──
   function showMsg(text, type = "ok") {
     setMsg({ text, type });
     setTimeout(() => setMsg({ text: "", type: "ok" }), 4000);
   }
 
-  // ── API helper ──
   const api = useCallback(async (action, data) => {
-    if (!urlGuardada) { showMsg("⚠ Primero configura la URL del Apps Script.", "warn"); return null; }
     try {
-      let url = urlGuardada + "?action=" + encodeURIComponent(action);
+      let url = APPS_SCRIPT_URL + "?action=" + encodeURIComponent(action);
       if (data) url += "&data=" + encodeURIComponent(JSON.stringify(data));
       const res = await fetch(url, { redirect: "follow" });
-      const text = await res.text();
-      return JSON.parse(text);
-    } catch (e) {
-      showMsg("❌ Error de conexión con Google Sheets.", "error");
+      return JSON.parse(await res.text());
+    } catch {
+      showMsg("Error de conexión con Google Sheets.", "error");
       return null;
     }
-  }, [urlGuardada]);
+  }, []);
 
-  // ── Cargar datos al conectar ──
   const cargarDatos = useCallback(async () => {
-    if (!urlGuardada) return;
     setLoading(true);
-    const [c, e] = await Promise.all([
-      api("getConsumos"),
-      api("getEntradas"),
-    ]);
-    if (c) setConsumos(c.map(r => ({ ...r, litros: Number(r.litros), horas: Number(r.horas) })));
+    const [c, e] = await Promise.all([api("getConsumos"), api("getEntradas")]);
+    if (c) setConsumos(c.map(r => ({ ...r, litros: Number(r.litros), horas: r.horas === "N/A" ? "N/A" : Number(r.horas) })));
     if (e) setEntradas(e.map(r => ({ ...r, litros: Number(r.litros) })));
     setLoading(false);
-  }, [urlGuardada, api]);
+  }, [api]);
 
   useEffect(() => { cargarDatos(); }, [cargarDatos]);
 
-  // ── Horómetro ──
   const horasCalculadas = useMemo(() => {
     if (fc.naHoras) return "N/A";
     if (fc.modoHoras === "horometro") {
-      const actual = parseFloat(fc.horometroActual);
-      const anterior = parseFloat(fc.horometroAnterior);
+      const actual = parseFloat(fc.horometroActual), anterior = parseFloat(fc.horometroAnterior);
       if (!isNaN(actual) && !isNaN(anterior) && actual > anterior)
         return parseFloat((actual - anterior).toFixed(1));
       return null;
@@ -150,20 +120,11 @@ export default function DieselControl() {
     return !isNaN(h) && h > 0 ? h : null;
   }, [fc]);
 
-  const ultimoHorometro = useMemo(() => {
-    const map = {};
-    [...consumos].sort((a, b) => new Date(a.fecha) - new Date(b.fecha)).forEach(c => {
-      if (c.horometroActual) map[c.unidad] = c.horometroActual;
-    });
-    return map;
-  }, [consumos]);
-
-  // ── Totales ──
   const totalEntradas = entradas.reduce((s, e) => s + Number(e.litros), 0);
   const totalConsumo  = consumos.reduce((s, c) => s + Number(c.litros), 0);
   const saldo = totalEntradas - totalConsumo;
+  const pctConsumo = totalEntradas > 0 ? Math.min(100, (totalConsumo / totalEntradas) * 100) : 0;
 
-  // ── Rendimientos ──
   const rendimientos = useMemo(() => {
     const map = {};
     consumos.forEach(c => {
@@ -193,10 +154,9 @@ export default function DieselControl() {
     }));
   }, [consumos]);
 
-  // ── Guardar consumo ──
   async function addConsumo() {
-    if (!fc.fecha || !fc.unidad || !fc.litros) { showMsg("⚠ Completa fecha, unidad y litros.", "warn"); return; }
-    if (horasCalculadas === null) { showMsg("⚠ Ingresa horómetro, horas o marca N/A.", "warn"); return; }
+    if (!fc.fecha || !fc.unidad || !fc.litros) { showMsg("Completa fecha, unidad y litros.", "warn"); return; }
+    if (horasCalculadas === null) { showMsg("Ingresa horómetro, horas o marca N/A.", "warn"); return; }
     const nuevo = {
       id: Date.now(), fecha: fc.fecha, unidad: fc.unidad,
       litros: Number(fc.litros), horas: horasCalculadas === "N/A" ? "N/A" : horasCalculadas,
@@ -204,551 +164,543 @@ export default function DieselControl() {
       modoHoras: fc.modoHoras,
       horometroActual: fc.modoHoras === "horometro" ? Number(fc.horometroActual) : "",
       horometroAnterior: fc.modoHoras === "horometro" ? Number(fc.horometroAnterior) : "",
-      kilometraje: fc.kilometraje || "",
     };
     setConsumos(prev => [...prev, nuevo]);
     setFc(initialFc);
-    showMsg("✔ Consumo registrado.");
-    if (urlGuardada) {
-      setSyncing(true);
-      await api("addConsumo", nuevo);
-      setSyncing(false);
-    }
+    showMsg("Consumo registrado correctamente.");
+    setSyncing(true);
+    await api("addConsumo", nuevo);
+    setSyncing(false);
   }
 
-  // ── Guardar entrada ──
   async function addEntrada() {
-    if (!fe.fecha || !fe.litros) { showMsg("⚠ Fecha y litros son requeridos.", "warn"); return; }
+    if (!fe.fecha || !fe.litros) { showMsg("Fecha y litros son requeridos.", "warn"); return; }
     const nuevo = { id: Date.now(), fecha: fe.fecha, litros: Number(fe.litros), proveedor: fe.proveedor, factura: fe.factura, notas: fe.notas };
     setEntradas(prev => [...prev, nuevo]);
     setFe({ fecha: "", litros: "", proveedor: "", factura: "", notas: "" });
-    showMsg("✔ Entrada registrada.");
-    if (urlGuardada) {
-      setSyncing(true);
-      await api("addEntrada", nuevo);
-      setSyncing(false);
-    }
+    showMsg("Entrada registrada correctamente.");
+    setSyncing(true);
+    await api("addEntrada", nuevo);
+    setSyncing(false);
   }
 
-  // ── Eliminar ──
   async function delConsumo(id) {
+    if (!confirm("¿Eliminar este registro?")) return;
     setConsumos(prev => prev.filter(c => c.id !== id));
-    if (urlGuardada) await api("deleteConsumo", { id });
+    await api("deleteConsumo", { id });
   }
   async function delEntrada(id) {
+    if (!confirm("¿Eliminar esta entrada?")) return;
     setEntradas(prev => prev.filter(e => e.id !== id));
-    if (urlGuardada) await api("deleteEntrada", { id });
+    await api("deleteEntrada", { id });
   }
 
   function onSelectUnidad(unidad) {
-    const usaH = tieneHorometro(unidad);
     setFc(p => ({
       ...p, unidad,
-      modoHoras: usaH ? "horometro" : "directas",
-      horometroAnterior: "",
-      horometroActual: "", horasDirectas: ""
+      modoHoras: tieneHorometro(unidad) ? "horometro" : "directas",
+      horometroAnterior: "", horometroActual: "", horasDirectas: ""
     }));
   }
 
-  const inputCls = "w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-amber-500 placeholder-zinc-600";
-  const labelCls = "block text-xs text-zinc-500 uppercase tracking-widest mb-1 font-mono";
-  const tabCls   = (t) => `px-4 py-2 text-xs font-mono uppercase tracking-widest transition-all ${tab === t ? "bg-amber-500 text-zinc-900 font-bold" : "text-zinc-500 hover:text-zinc-200"}`;
-  const msgColors = { ok: "border-emerald-500/40 text-emerald-400", warn: "border-amber-500/40 text-amber-400", error: "border-red-500/40 text-red-400" };
+  // ── Styles ──
+  const S = {
+    input: {
+      width: "100%", background: "#18181b", border: "1.5px solid #3f3f46",
+      color: "#f4f4f5", borderRadius: 10, padding: "10px 14px", fontSize: 14,
+      outline: "none", transition: "border-color 0.2s", fontFamily: "inherit"
+    },
+    label: { display: "block", fontSize: 11, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontWeight: 600 },
+    card: { background: "#18181b", borderRadius: 16, padding: "20px 24px", border: "1px solid #27272a" },
+    btn: (color) => ({
+      width: "100%", padding: "13px", borderRadius: 12, border: "none", cursor: "pointer",
+      fontWeight: 700, fontSize: 14, letterSpacing: "0.04em", transition: "opacity 0.15s",
+      background: color === "amber" ? "#f59e0b" : color === "green" ? "#10b981" : "#ef4444",
+      color: color === "amber" ? "#18181b" : "#fff"
+    }),
+  };
+
+  const tabs = [
+    { id: "dashboard", label: "Panel", icon: "📊" },
+    { id: "consumo",   label: "Consumo", icon: "🛢" },
+    { id: "entrada",   label: "Entradas", icon: "⛽" },
+    { id: "reportes",  label: "Reportes", icon: "📋" },
+  ];
+
+  const msgStyle = {
+    ok:    { background: "#052e16", border: "1px solid #166534", color: "#86efac" },
+    warn:  { background: "#1c1400", border: "1px solid #854d0e", color: "#fde047" },
+    error: { background: "#1c0000", border: "1px solid #991b1b", color: "#fca5a5" },
+  };
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Mono','Courier New',monospace", background: "#0f0f0f", minHeight: "100vh", color: "#e4e4e7" }}>
+    <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", background: "#09090b", minHeight: "100vh", color: "#f4f4f5" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #18181b; } ::-webkit-scrollbar-thumb { background: #ca8a04; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #18181b; }
+        ::-webkit-scrollbar-thumb { background: #f59e0b; border-radius: 4px; }
         select option { background: #18181b; }
+        input:focus, select:focus, textarea:focus { border-color: #f59e0b !important; box-shadow: 0 0 0 3px #f59e0b18; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .animate-spin { animation: spin 0.8s linear infinite; }
+        .spin { animation: spin 0.8s linear infinite; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+        .fade { animation: fadeIn 0.25s ease; }
+        .row-hover:hover { background: #27272a; }
+        .tab-btn { border: none; cursor: pointer; transition: all 0.15s; background: transparent; }
+        .tab-btn:hover { opacity: 0.85; }
+        .pill-btn { border: 1.5px solid #3f3f46; background: #27272a; color: #a1a1aa; border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer; transition: all 0.15s; font-weight: 600; }
+        .pill-btn:hover { border-color: #a1a1aa; color: #f4f4f5; }
+        .pill-btn.active { background: #f59e0b; border-color: #f59e0b; color: #18181b; }
       `}</style>
 
-      {/* Header */}
-      <div className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-amber-500 rounded flex items-center justify-center">
-            <span className="text-zinc-900 font-bold">⛽</span>
-          </div>
+      {/* ── HEADER ── */}
+      <div style={{ background: "#18181b", borderBottom: "1px solid #27272a", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 38, height: 38, background: "linear-gradient(135deg,#f59e0b,#d97706)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>⛽</div>
           <div>
-            <h1 className="text-sm font-bold text-zinc-100 tracking-wider uppercase">Control de Diesel</h1>
-            <p className="text-xs text-zinc-600">Sistema de gestión de combustible</p>
+            <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: "-0.01em" }}>Control de Diesel</div>
+            <div style={{ fontSize: 11, color: "#71717a" }}>Grupo Ceballos · Temporada 2025</div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {syncing && <Spinner />}
-          {urlGuardada ? (
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span className="text-xs font-mono text-zinc-500 hidden md:block">Google Sheets conectado</span>
-              <button onClick={cargarDatos} className="text-xs font-mono text-zinc-600 hover:text-amber-400 transition-colors px-2">↻ Sync</button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-amber-400" />
-              <span className="text-xs font-mono text-amber-500">Sin conectar</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {syncing && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#a1a1aa" }}>
+              <div className="spin" style={{ width: 12, height: 12, border: "2px solid #f59e0b", borderTopColor: "transparent", borderRadius: "50%" }} />
+              Guardando...
             </div>
           )}
-          <span className="text-xs font-mono text-zinc-600">Saldo: <span className={saldo >= 0 ? "text-emerald-400" : "text-red-400"}>{saldo.toFixed(0)} L</span></span>
+          <button onClick={cargarDatos} style={{ background: "#27272a", border: "1px solid #3f3f46", color: "#a1a1aa", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>↻ Actualizar</button>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 11, color: "#71717a" }}>Saldo</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: saldo >= 0 ? "#10b981" : "#ef4444" }}>{saldo.toLocaleString()} L</div>
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-zinc-800 flex overflow-x-auto">
-        {["config","dashboard","consumo","entrada","reportes"].map(t => (
-          <button key={t} className={tabCls(t)} onClick={() => setTab(t)}>
-            {t === "config" ? "⚙ Conexión" : t === "dashboard" ? "📊 Panel" : t === "consumo" ? "⬇ Consumo" : t === "entrada" ? "⬆ Entradas" : "📋 Reportes"}
+      {/* ── TABS ── */}
+      <div style={{ background: "#18181b", borderBottom: "1px solid #27272a", padding: "0 16px", display: "flex", gap: 4, overflowX: "auto" }}>
+        {tabs.map(t => (
+          <button key={t.id} className="tab-btn" onClick={() => setTab(t.id)}
+            style={{ padding: "12px 16px", fontSize: 13, fontWeight: tab === t.id ? 700 : 500, color: tab === t.id ? "#f59e0b" : "#71717a", borderBottom: tab === t.id ? "2px solid #f59e0b" : "2px solid transparent", whiteSpace: "nowrap" }}>
+            {t.icon} {t.label}
           </button>
         ))}
       </div>
 
+      {/* ── MSG ── */}
       {msg.text && (
-        <div className={`mx-6 mt-4 px-4 py-2 bg-zinc-800 border ${msgColors[msg.type]} text-xs font-mono rounded`}>
+        <div className="fade" style={{ margin: "16px 16px 0", padding: "10px 16px", borderRadius: 10, fontSize: 13, fontWeight: 500, ...msgStyle[msg.type] }}>
           {msg.text}
         </div>
       )}
 
+      {/* ── LOADING ── */}
       {loading && (
-        <div className="flex items-center justify-center py-16 gap-3 text-sm font-mono text-zinc-500">
-          <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-          Cargando datos de Google Sheets...
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 0", gap: 12, color: "#71717a" }}>
+          <div className="spin" style={{ width: 22, height: 22, border: "3px solid #f59e0b", borderTopColor: "transparent", borderRadius: "50%" }} />
+          <span style={{ fontSize: 14 }}>Cargando datos...</span>
         </div>
       )}
 
       {!loading && (
-      <div className="p-6 max-w-6xl mx-auto">
+      <div style={{ padding: "20px 16px", maxWidth: 900, margin: "0 auto" }} className="fade">
 
-        {/* ── CONFIGURACIÓN ── */}
-        {tab === "config" && (
-          <div className="max-w-xl space-y-6">
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-5 space-y-4">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest font-mono">⚙ Conectar con Google Sheets</p>
-
-              <div className="bg-zinc-800 border border-zinc-700 rounded p-4 space-y-2 text-xs font-mono text-zinc-400">
-                <p className="text-amber-400 font-bold">Pasos para configurar (solo una vez):</p>
-                <p>1. Abre <span className="text-zinc-200">sheets.google.com</span> y crea una hoja llamada <span className="text-zinc-200">Control Diesel</span></p>
-                <p>2. Crea dos pestañas: <span className="text-zinc-200">Consumos</span> y <span className="text-zinc-200">Entradas</span></p>
-                <p>3. En el menú ve a <span className="text-zinc-200">Extensiones → Apps Script</span></p>
-                <p>4. Borra el código existente y pega el contenido del archivo <span className="text-zinc-200">apps-script.gs</span></p>
-                <p>5. Haz clic en <span className="text-zinc-200">Implementar → Nueva implementación</span></p>
-                <p>6. Tipo: <span className="text-zinc-200">Aplicación web</span> · Acceso: <span className="text-zinc-200">Cualquier persona</span></p>
-                <p>7. Copia la URL que aparece y pégala abajo</p>
-              </div>
-
-              <div>
-                <label className={labelCls}>URL del Apps Script *</label>
-                <input
-                  className={inputCls}
-                  placeholder="https://script.google.com/macros/s/..."
-                  value={scriptUrl}
-                  onChange={e => setScriptUrl(e.target.value)}
-                />
-              </div>
-
-              <button
-                onClick={async () => {
-                  if (!scriptUrl.startsWith("https://script.google.com")) {
-                    showMsg("⚠ La URL no parece válida. Debe empezar con https://script.google.com", "warn");
-                    return;
-                  }
-                  setUrlGuardada(scriptUrl);
-                  showMsg("✔ URL guardada. Cargando datos...");
-                  setTab("dashboard");
-                }}
-                className="w-full bg-amber-500 hover:bg-amber-400 text-zinc-900 font-bold text-sm py-2.5 rounded font-mono uppercase tracking-widest transition-all">
-                Guardar y Conectar
-              </button>
-
-              {urlGuardada && (
-                <div className="flex items-center justify-between px-3 py-2 bg-emerald-900/20 border border-emerald-700/40 rounded text-xs font-mono">
-                  <span className="text-emerald-400">✔ Conectado a Google Sheets</span>
-                  <button onClick={() => { setUrlGuardada(""); setScriptUrl(""); setConsumos([]); setEntradas([]); }}
-                    className="text-zinc-600 hover:text-red-400 transition-colors">Desconectar</button>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-4 text-xs font-mono text-zinc-600 space-y-1">
-              <p className="text-zinc-500 font-bold">ℹ Sin conexión a Sheets</p>
-              <p>El sistema funciona normalmente pero los datos solo se guardan en esta sesión del navegador. Al cerrar la pestaña se pierden.</p>
-            </div>
-          </div>
-        )}
-
-        {/* ── DASHBOARD ── */}
+        {/* ══════════ DASHBOARD ══════════ */}
         {tab === "dashboard" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <StatCard label="Total Entradas"   value={`${totalEntradas.toLocaleString()} L`} sub={`${entradas.length} entregas`}  accent="blue" />
-              <StatCard label="Total Consumido"  value={`${totalConsumo.toLocaleString()} L`}  sub={`${consumos.length} registros`} accent="amber" />
-              <StatCard label="Saldo Disponible" value={`${saldo.toLocaleString()} L`}          sub={saldo > 0 ? "En existencia" : "¡DÉFICIT!"} accent={saldo > 100 ? "green" : "red"} />
-              <StatCard label="Unidades Activas" value={rendimientos.length} sub="con registros" accent="blue" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+            {/* Stat cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 }}>
+              {[
+                { label: "Diesel recibido", value: `${totalEntradas.toLocaleString()} L`, sub: `${entradas.length} cargas`, color: "#3b82f6", icon: "⬆" },
+                { label: "Diesel consumido", value: `${totalConsumo.toLocaleString()} L`, sub: `${consumos.length} registros`, color: "#f59e0b", icon: "⬇" },
+                { label: "Saldo disponible", value: `${saldo.toLocaleString()} L`, sub: saldo >= 0 ? "En existencia" : "¡DÉFICIT!", color: saldo >= 100 ? "#10b981" : "#ef4444", icon: saldo >= 0 ? "✓" : "!" },
+                { label: "Unidades activas", value: rendimientos.length, sub: "con registros", color: "#8b5cf6", icon: "🚜" },
+              ].map(s => (
+                <div key={s.label} style={{ background: "#18181b", borderRadius: 14, padding: "16px", border: `1px solid ${s.color}30`, position: "relative", overflow: "hidden" }}>
+                  <div style={{ position: "absolute", top: 12, right: 14, fontSize: 20, opacity: 0.15 }}>{s.icon}</div>
+                  <div style={{ fontSize: 11, color: "#71717a", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{s.label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontSize: 11, color: "#52525b", marginTop: 4 }}>{s.sub}</div>
+                </div>
+              ))}
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest mb-3 font-mono">Balance de Diesel</p>
-              <div className="relative h-6 bg-zinc-800 rounded overflow-hidden">
-                <div className="h-full bg-amber-500 transition-all duration-700"
-                  style={{ width: `${totalEntradas > 0 ? Math.min(100, (totalConsumo / totalEntradas) * 100).toFixed(1) : 0}%` }} />
-                <span className="absolute inset-0 flex items-center justify-center text-xs font-mono text-zinc-900 font-bold">
-                  {totalEntradas > 0 ? `${((totalConsumo / totalEntradas) * 100).toFixed(1)}% consumido` : "Sin datos"}
-                </span>
+            {/* Barra de balance */}
+            <div style={S.card}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa" }}>Balance de combustible</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: pctConsumo > 80 ? "#ef4444" : "#f59e0b" }}>{pctConsumo.toFixed(1)}% consumido</span>
               </div>
-              <div className="flex justify-between text-xs text-zinc-600 font-mono mt-1">
-                <span>0 L</span><span>{totalEntradas.toLocaleString()} L total</span>
+              <div style={{ height: 12, background: "#27272a", borderRadius: 99, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pctConsumo}%`, background: pctConsumo > 80 ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "linear-gradient(90deg,#10b981,#f59e0b)", borderRadius: 99, transition: "width 0.8s ease" }} />
               </div>
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest mb-3 font-mono">Rendimiento por Unidad</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs font-mono">
-                  <thead><tr className="border-b border-zinc-800">
-                    {["Unidad","Litros","Horas","L/Hr","Registros"].map(h => (
-                      <th key={h} className="text-left text-zinc-600 pb-2 pr-4 uppercase tracking-widest">{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>
-                    {rendimientos.length === 0
-                      ? <tr><td colSpan={5} className="text-zinc-600 py-4">Sin datos aún</td></tr>
-                      : rendimientos.map(r => (
-                        <tr key={r.unidad} className="border-b border-zinc-900 hover:bg-zinc-800/40 transition-colors">
-                          <td className="py-2 pr-4 text-amber-400 font-bold">{r.unidad}</td>
-                          <td className="py-2 pr-4 text-zinc-300">{r.litros} L</td>
-                          <td className="py-2 pr-4 text-zinc-300">{r.horas} hr</td>
-                          <td className="py-2 pr-4"><Badge color={Number(r.lph)<13?"green":Number(r.lph)<16?"amber":"red"}>{r.lph} L/hr</Badge></td>
-                          <td className="py-2 text-zinc-500">{r.registros}</td>
-                        </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#52525b", marginTop: 6 }}>
+                <span>0 L</span><span>{totalEntradas.toLocaleString()} L</span>
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-                <p className="text-xs text-zinc-500 uppercase tracking-widest mb-3 font-mono">Últimos Consumos</p>
-                {consumos.length === 0
-                  ? <p className="text-zinc-600 text-xs font-mono">Sin registros aún.</p>
-                  : <div className="space-y-2">{[...consumos].reverse().slice(0,5).map(c => (
-                    <div key={c.id} className="flex items-start justify-between py-1 border-b border-zinc-800">
-                      <div>
-                        <span className="text-amber-400 font-bold text-xs">{c.unidad}</span>
-                        <span className="text-zinc-600 text-xs ml-2">{formatDate(c.fecha)}</span>
-                        <div className="mt-0.5">{c.trabajo ? <Badge color="blue">{c.trabajo}</Badge> : <Badge color="gray">—</Badge>}</div>
+            {/* Rendimiento unidades */}
+            {rendimientos.length > 0 && (
+              <div style={S.card}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Rendimiento por unidad</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {rendimientos.map(r => {
+                    const maxLph = Math.max(...rendimientos.map(x => Number(x.lph) || 0));
+                    const pct = maxLph > 0 ? (Number(r.lph) / maxLph) * 100 : 0;
+                    const color = lphColor(r.lph);
+                    return (
+                      <div key={r.unidad}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>{r.unidad}</span>
+                          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                            <span style={{ fontSize: 11, color: "#71717a" }}>{r.litros} L · {r.horas} hr</span>
+                            <LphBadge lph={r.lph} />
+                          </div>
+                        </div>
+                        <div style={{ height: 6, background: "#27272a", borderRadius: 99, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 99, transition: "width 0.6s ease" }} />
+                        </div>
                       </div>
-                      <span className="text-red-400 font-mono text-xs ml-2 whitespace-nowrap">-{c.litros} L</span>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 12, fontSize: 11, color: "#3f3f46" }}>Verde &lt;13 L/hr · Ámbar 13-16 L/hr · Rojo &gt;16 L/hr</div>
+              </div>
+            )}
+
+            {/* Últimos movimientos */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={S.card}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 12 }}>Últimos consumos</div>
+                {consumos.length === 0
+                  ? <div style={{ fontSize: 13, color: "#52525b", textAlign: "center", padding: "20px 0" }}>Sin registros aún</div>
+                  : [...consumos].reverse().slice(0, 5).map(c => (
+                    <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "8px 0", borderBottom: "1px solid #27272a" }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{c.unidad}</div>
+                        <div style={{ fontSize: 11, color: "#71717a", marginTop: 2 }}>{formatDate(c.fecha)}</div>
+                        {c.trabajo && <div style={{ marginTop: 4 }}><WorkBadge trabajo={c.trabajo} /></div>}
+                      </div>
+                      <div style={{ color: "#ef4444", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>-{c.litros} L</div>
                     </div>
-                  ))}</div>
+                  ))
                 }
               </div>
-              <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-                <p className="text-xs text-zinc-500 uppercase tracking-widest mb-3 font-mono">Últimas Entradas</p>
+              <div style={S.card}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 12 }}>Últimas entradas</div>
                 {entradas.length === 0
-                  ? <p className="text-zinc-600 text-xs font-mono">Sin registros aún.</p>
-                  : <div className="space-y-2">{[...entradas].reverse().slice(0,5).map(e => (
-                    <div key={e.id} className="flex items-start justify-between py-1 border-b border-zinc-800">
+                  ? <div style={{ fontSize: 13, color: "#52525b", textAlign: "center", padding: "20px 0" }}>Sin registros aún</div>
+                  : [...entradas].reverse().slice(0, 5).map(e => (
+                    <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "8px 0", borderBottom: "1px solid #27272a" }}>
                       <div>
-                        <span className="text-emerald-400 font-bold text-xs">{e.proveedor || "Sin proveedor"}</span>
-                        <div className="text-zinc-600 text-xs">{formatDate(e.fecha)}{e.factura && ` · ${e.factura}`}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{e.proveedor || "Sin proveedor"}</div>
+                        <div style={{ fontSize: 11, color: "#71717a", marginTop: 2 }}>{formatDate(e.fecha)}</div>
                       </div>
-                      <span className="text-emerald-400 font-mono text-xs ml-2 whitespace-nowrap">+{e.litros} L</span>
+                      <div style={{ color: "#10b981", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>+{e.litros} L</div>
                     </div>
-                  ))}</div>
+                  ))
                 }
               </div>
             </div>
           </div>
         )}
 
-        {/* ── CONSUMO ── */}
+        {/* ══════════ CONSUMO ══════════ */}
         {tab === "consumo" && (
-          <div className="space-y-6">
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-5">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest mb-4 font-mono">⬇ Registrar Consumo</p>
-              <div className="grid md:grid-cols-2 gap-4">
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={S.card}>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 20 }}>🛢 Registrar consumo</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <div>
-                  <label className={labelCls}>Fecha *</label>
-                  <input type="date" className={inputCls} value={fc.fecha}
-                    onChange={e => setFc(p => ({ ...p, fecha: e.target.value }))} />
+                  <label style={S.label}>Fecha *</label>
+                  <input type="date" style={S.input} value={fc.fecha} onChange={e => setFc(p => ({ ...p, fecha: e.target.value }))} />
                 </div>
                 <div>
-                  <label className={labelCls}>Unidad *</label>
-                  <select className={inputCls} value={fc.unidad} onChange={e => onSelectUnidad(e.target.value)}>
+                  <label style={S.label}>Unidad *</label>
+                  <select style={S.input} value={fc.unidad} onChange={e => onSelectUnidad(e.target.value)}>
                     <option value="">Seleccionar unidad...</option>
-                    <optgroup label="─── Tractores ───">
+                    <optgroup label="── Tractores ──">
                       {UNIDADES.filter(u => u.startsWith("Tractor")).map(u => <option key={u}>{u}</option>)}
                     </optgroup>
-                    <optgroup label="─── Trilladoras ───">
+                    <optgroup label="── Trilladoras ──">
                       {UNIDADES.filter(u => u.startsWith("Trilladora")).map(u => <option key={u}>{u}</option>)}
                     </optgroup>
-                    <optgroup label="─── Tortons ───">
+                    <optgroup label="── Tortons ──">
                       {UNIDADES.filter(u => u.startsWith("Torton")).map(u => <option key={u}>{u}</option>)}
                     </optgroup>
-                    <optgroup label="─── Piscadoras ───">
+                    <optgroup label="── Piscadoras ──">
                       {UNIDADES.filter(u => u.startsWith("Piscadora")).map(u => <option key={u}>{u}</option>)}
                     </optgroup>
-                    <optgroup label="─── Camionetas ───">
+                    <optgroup label="── Camionetas ──">
                       {UNIDADES.filter(u => u.startsWith("Nissan")).map(u => <option key={u}>{u}</option>)}
                     </optgroup>
                   </select>
                 </div>
                 <div>
-                  <label className={labelCls}>Litros consumidos *</label>
-                  <input type="number" min="0" step="0.1" className={inputCls} placeholder="0.0"
-                    value={fc.litros} onChange={e => setFc(p => ({ ...p, litros: e.target.value }))} />
+                  <label style={S.label}>Litros consumidos *</label>
+                  <input type="number" min="0" step="0.1" style={S.input} placeholder="0.0" value={fc.litros} onChange={e => setFc(p => ({ ...p, litros: e.target.value }))} />
                 </div>
                 <div>
-                  <label className={labelCls}>Trabajo realizado</label>
-                  <select className={inputCls} value={fc.trabajo}
-                    onChange={e => setFc(p => ({ ...p, trabajo: e.target.value }))}>
+                  <label style={S.label}>Trabajo realizado</label>
+                  <select style={S.input} value={fc.trabajo} onChange={e => setFc(p => ({ ...p, trabajo: e.target.value }))}>
                     <option value="">Sin especificar</option>
                     {TRABAJOS.map(t => <option key={t}>{t}</option>)}
                   </select>
                 </div>
               </div>
 
+              {/* Horómetro */}
               {fc.unidad && (
-                <div className="mt-4 bg-zinc-800/60 border border-zinc-700 rounded p-4">
-                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                    <p className="text-xs text-zinc-400 uppercase tracking-widest font-mono">Horas de trabajo</p>
-                    <div className="flex gap-2 flex-wrap">
+                <div style={{ marginTop: 16, background: "#09090b", borderRadius: 12, padding: 16, border: "1px solid #27272a" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em" }}>Horas de trabajo</span>
+                    <div style={{ display: "flex", gap: 6 }}>
                       {tieneHorometro(fc.unidad) && !fc.naHoras && (
                         <>
-                          {["horometro","directas"].map(m => (
-                            <button key={m} onClick={() => setFc(p => ({ ...p, modoHoras: m }))}
-                              className={`text-xs font-mono px-3 py-1 rounded border transition-all ${fc.modoHoras === m && !fc.naHoras ? "bg-amber-500 border-amber-500 text-zinc-900 font-bold" : "bg-zinc-800 border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}>
+                          {["horometro", "directas"].map(m => (
+                            <button key={m} className={`pill-btn ${fc.modoHoras === m ? "active" : ""}`}
+                              onClick={() => setFc(p => ({ ...p, modoHoras: m }))}>
                               {m === "horometro" ? "Horómetro" : "Horas directas"}
                             </button>
                           ))}
                         </>
                       )}
-                      <button
-                        onClick={() => setFc(p => ({ ...p, naHoras: !p.naHoras }))}
-                        className={`text-xs font-mono px-3 py-1 rounded border transition-all ${fc.naHoras ? "bg-zinc-500 border-zinc-400 text-zinc-900 font-bold" : "bg-zinc-800 border-zinc-600 text-zinc-400 hover:border-zinc-400"}`}>
-                        N/A
-                      </button>
+                      <button className={`pill-btn ${fc.naHoras ? "active" : ""}`}
+                        onClick={() => setFc(p => ({ ...p, naHoras: !p.naHoras }))}>N/A</button>
                     </div>
                   </div>
                   {fc.naHoras ? (
-                    <div className="px-3 py-2 bg-zinc-900 border border-zinc-600 rounded text-xs font-mono text-zinc-400">
-                      Horas marcadas como <strong className="text-zinc-300">N/A</strong> — no se calculará rendimiento L/hr para este registro.
+                    <div style={{ padding: "10px 14px", background: "#27272a", borderRadius: 8, fontSize: 13, color: "#a1a1aa" }}>
+                      Horas marcadas como <strong style={{ color: "#f4f4f5" }}>N/A</strong> — no se calculará rendimiento L/hr.
                     </div>
                   ) : fc.modoHoras === "horometro" ? (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       <div>
-                        <label className={labelCls}>Horómetro anterior</label>
-                        <input type="number" min="0" step="0.1" className={inputCls} placeholder="ej. 4520.0"
+                        <label style={S.label}>Horómetro anterior</label>
+                        <input type="number" min="0" step="0.1" style={S.input} placeholder="ej. 4520.0"
                           value={fc.horometroAnterior} onChange={e => setFc(p => ({ ...p, horometroAnterior: e.target.value }))} />
-
                       </div>
                       <div>
-                        <label className={labelCls}>Horómetro actual</label>
-                        <input type="number" min="0" step="0.1" className={inputCls} placeholder="ej. 4528.5"
+                        <label style={S.label}>Horómetro actual</label>
+                        <input type="number" min="0" step="0.1" style={S.input} placeholder="ej. 4528.5"
                           value={fc.horometroActual} onChange={e => setFc(p => ({ ...p, horometroActual: e.target.value }))} />
                       </div>
                       {horasCalculadas !== null && horasCalculadas !== "N/A" && (
-                        <div className="col-span-2 px-3 py-2 bg-zinc-900 border border-amber-500/30 rounded text-xs font-mono text-amber-400">
+                        <div style={{ gridColumn: "span 2", padding: "10px 14px", background: "#1c1400", border: "1px solid #854d0e50", borderRadius: 8, fontSize: 13, color: "#fde047" }}>
                           Horas trabajadas: <strong>{horasCalculadas} hr</strong>
+                          {fc.litros && horasCalculadas > 0 && <span style={{ marginLeft: 16, color: "#f59e0b" }}>· Rendimiento estimado: <strong>{(Number(fc.litros) / horasCalculadas).toFixed(2)} L/hr</strong></span>}
                         </div>
                       )}
                     </div>
                   ) : (
                     <div>
-                      <label className={labelCls}>Horas trabajadas</label>
-                      <input type="number" min="0" step="0.1" className={inputCls} placeholder="ej. 8.5"
+                      <label style={S.label}>Horas trabajadas</label>
+                      <input type="number" min="0" step="0.1" style={S.input} placeholder="ej. 8.5"
                         value={fc.horasDirectas} onChange={e => setFc(p => ({ ...p, horasDirectas: e.target.value }))} />
                     </div>
                   )}
                 </div>
               )}
 
-              {fc.litros && horasCalculadas !== null && horasCalculadas !== "N/A" && horasCalculadas > 0 && (
-                <div className="mt-3 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-xs font-mono text-amber-400">
-                  Rendimiento estimado: <strong>{(Number(fc.litros) / horasCalculadas).toFixed(2)} L/hr</strong>
-                  {fc.trabajo && <span className="text-zinc-500 ml-2">· {fc.trabajo}</span>}
-                </div>
-              )}
-
-              <div className="mt-4 grid md:grid-cols-2 gap-4">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
                 <div>
-                  <label className={labelCls}>Kilometraje <span className="text-zinc-700 normal-case">(opcional)</span></label>
-                  <input type="number" min="0" className={inputCls} placeholder="ej. 45200"
+                  <label style={S.label}>Kilometraje <span style={{ color: "#3f3f46", textTransform: "none", fontWeight: 400 }}>(opcional)</span></label>
+                  <input type="number" min="0" style={S.input} placeholder="ej. 45200"
                     value={fc.kilometraje} onChange={e => setFc(p => ({ ...p, kilometraje: e.target.value }))} />
                 </div>
                 <div>
-                  <label className={labelCls}>Notas</label>
-                  <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Observaciones opcionales..."
+                  <label style={S.label}>Notas</label>
+                  <textarea style={{ ...S.input, resize: "none", height: 42 }} rows={2} placeholder="Observaciones..."
                     value={fc.notas} onChange={e => setFc(p => ({ ...p, notas: e.target.value }))} />
                 </div>
               </div>
-              <button onClick={addConsumo}
-                className="mt-4 w-full bg-amber-500 hover:bg-amber-400 text-zinc-900 font-bold text-sm py-2.5 rounded font-mono uppercase tracking-widest transition-all">
-                Registrar Consumo {!urlGuardada && "(sin sync)"}
+
+              <button onClick={addConsumo} style={{ ...S.btn("amber"), marginTop: 18 }}>
+                Registrar consumo
               </button>
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest mb-3 font-mono">Historial de Consumos</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs font-mono">
-                  <thead><tr className="border-b border-zinc-800">
-                    {["Fecha","Unidad","Litros","Horómetro","Horas","L/Hr","Trabajo",""].map(h => (
-                      <th key={h} className="text-left text-zinc-600 pb-2 pr-3 uppercase tracking-widest">{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>
-                    {consumos.length === 0
-                      ? <tr><td colSpan={8} className="text-zinc-600 py-4">Sin registros aún.</td></tr>
-                      : [...consumos].reverse().map(c => (
-                        <tr key={c.id} className="border-b border-zinc-900 hover:bg-zinc-800/40 transition-colors">
-                          <td className="py-2 pr-3 text-zinc-500 whitespace-nowrap">{formatDate(c.fecha)}</td>
-                          <td className="py-2 pr-3 text-amber-400 font-bold">{c.unidad}</td>
-                          <td className="py-2 pr-3 text-red-400">{c.litros} L</td>
-                          <td className="py-2 pr-3 text-zinc-500">
-                            {c.modoHoras === "horometro" && c.horometroAnterior
-                              ? <span>{c.horometroAnterior}→<span className="text-zinc-300">{c.horometroActual}</span></span>
-                              : <span className="text-zinc-700">—</span>}
+            {/* Historial consumos */}
+            <div style={S.card}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Historial de consumos</div>
+              {consumos.length === 0
+                ? <div style={{ textAlign: "center", padding: "30px 0", color: "#52525b", fontSize: 14 }}>Sin registros aún. Agrega tu primer consumo arriba.</div>
+                : <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid #27272a" }}>
+                        {["Fecha","Unidad","Litros","Horómetro","Horas","L/Hr","Trabajo","Km",""].map(h => (
+                          <th key={h} style={{ textAlign: "left", padding: "0 12px 10px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...consumos].reverse().map(c => (
+                        <tr key={c.id} className="row-hover" style={{ borderBottom: "1px solid #1f1f22", transition: "background 0.15s" }}>
+                          <td style={{ padding: "10px 12px 10px 0", color: "#71717a", whiteSpace: "nowrap" }}>{formatDate(c.fecha)}</td>
+                          <td style={{ padding: "10px 12px 10px 0", fontWeight: 600, whiteSpace: "nowrap" }}>{c.unidad}</td>
+                          <td style={{ padding: "10px 12px 10px 0", color: "#ef4444", fontWeight: 700 }}>{c.litros} L</td>
+                          <td style={{ padding: "10px 12px 10px 0", color: "#52525b", fontSize: 12, whiteSpace: "nowrap" }}>
+                            {c.modoHoras === "horometro" && c.horometroAnterior ? `${c.horometroAnterior}→${c.horometroActual}` : "—"}
                           </td>
-                          <td className="py-2 pr-3 text-zinc-300">{c.horas} hr</td>
-                          <td className="py-2 pr-3">{c.horas === "N/A" ? <Badge color="gray">N/A</Badge> : <Badge color={Number(c.litros/c.horas)<13?"green":Number(c.litros/c.horas)<16?"amber":"red"}>{(c.litros/c.horas).toFixed(1)} L/hr</Badge>}</td>
-                          <td className="py-2 pr-3">{c.trabajo ? <Badge color="blue">{c.trabajo}</Badge> : <Badge color="gray">—</Badge>}</td>
-                          <td className="py-2 pr-3 text-zinc-500">{c.kilometraje ? `${Number(c.kilometraje).toLocaleString()} km` : "—"}</td>
-                          <td className="py-2">
-                            <button onClick={() => delConsumo(c.id)} className="text-zinc-700 hover:text-red-400 transition-colors" title="Eliminar">✕</button>
+                          <td style={{ padding: "10px 12px 10px 0", color: "#a1a1aa" }}>{c.horas === "N/A" ? "N/A" : `${c.horas} hr`}</td>
+                          <td style={{ padding: "10px 12px 10px 0" }}>
+                            {c.horas === "N/A" ? <span style={{ color: "#52525b", fontSize: 11 }}>N/A</span> : <LphBadge lph={(c.litros / c.horas).toFixed(1)} />}
                           </td>
-                        </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── ENTRADAS ── */}
-        {tab === "entrada" && (
-          <div className="space-y-6">
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-5">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest mb-4 font-mono">⬆ Registrar Entrada de Diesel</p>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelCls}>Fecha *</label>
-                  <input type="date" className={inputCls} value={fe.fecha}
-                    onChange={e => setFe(p => ({ ...p, fecha: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>Litros recibidos *</label>
-                  <input type="number" min="0" className={inputCls} placeholder="0.0"
-                    value={fe.litros} onChange={e => setFe(p => ({ ...p, litros: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>Proveedor</label>
-                  <input className={inputCls} placeholder="Nombre del proveedor..."
-                    value={fe.proveedor} onChange={e => setFe(p => ({ ...p, proveedor: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>No. Factura / Remisión</label>
-                  <input className={inputCls} placeholder="F-0000"
-                    value={fe.factura} onChange={e => setFe(p => ({ ...p, factura: e.target.value }))} />
-                </div>
-                <div className="md:col-span-2">
-                  <label className={labelCls}>Notas</label>
-                  <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Observaciones..."
-                    value={fe.notas} onChange={e => setFe(p => ({ ...p, notas: e.target.value }))} />
-                </div>
-              </div>
-              <button onClick={addEntrada}
-                className="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm py-2.5 rounded font-mono uppercase tracking-widest transition-all">
-                Registrar Entrada {!urlGuardada && "(sin sync)"}
-              </button>
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest mb-3 font-mono">Historial de Entradas</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs font-mono">
-                  <thead><tr className="border-b border-zinc-800">
-                    {["Fecha","Litros","Proveedor","Factura","Notas",""].map(h => (
-                      <th key={h} className="text-left text-zinc-600 pb-2 pr-3 uppercase tracking-widest">{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>
-                    {entradas.length === 0
-                      ? <tr><td colSpan={6} className="text-zinc-600 py-4">Sin registros aún.</td></tr>
-                      : [...entradas].reverse().map(e => (
-                        <tr key={e.id} className="border-b border-zinc-900 hover:bg-zinc-800/40 transition-colors">
-                          <td className="py-2 pr-3 text-zinc-500">{formatDate(e.fecha)}</td>
-                          <td className="py-2 pr-3 text-emerald-400 font-bold">+{e.litros} L</td>
-                          <td className="py-2 pr-3 text-zinc-300">{e.proveedor || "—"}</td>
-                          <td className="py-2 pr-3 text-zinc-500">{e.factura || "—"}</td>
-                          <td className="py-2 text-zinc-600">{e.notas || "—"}</td>
-                          <td className="py-2">
-                            <button onClick={() => delEntrada(e.id)} className="text-zinc-700 hover:text-red-400 transition-colors" title="Eliminar">✕</button>
+                          <td style={{ padding: "10px 12px 10px 0" }}><WorkBadge trabajo={c.trabajo} /></td>
+                          <td style={{ padding: "10px 12px 10px 0", color: "#52525b", fontSize: 12 }}>{c.kilometraje ? `${Number(c.kilometraje).toLocaleString()} km` : "—"}</td>
+                          <td style={{ padding: "10px 0" }}>
+                            <button onClick={() => delConsumo(c.id)} style={{ background: "none", border: "none", color: "#3f3f46", cursor: "pointer", fontSize: 14, padding: 4 }}>✕</button>
                           </td>
                         </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── REPORTES ── */}
-        {tab === "reportes" && (
-          <div className="space-y-6">
-            <div className="grid md:grid-cols-3 gap-3">
-              <StatCard label="Entradas totales" value={`${totalEntradas.toLocaleString()} L`} accent="blue" />
-              <StatCard label="Consumo total"    value={`${totalConsumo.toLocaleString()} L`}  accent="amber" />
-              <StatCard label="Saldo"            value={`${saldo.toLocaleString()} L`}          accent={saldo >= 0 ? "green" : "red"} />
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest mb-3 font-mono">Rendimiento por Unidad (L/hr)</p>
-              {rendimientos.length === 0
-                ? <p className="text-zinc-600 text-xs font-mono">Sin datos aún.</p>
-                : <div className="space-y-3">
-                  {rendimientos.map(r => {
-                    const maxLph = Math.max(...rendimientos.map(x => Number(x.lph)));
-                    const pct = maxLph > 0 ? (Number(r.lph) / maxLph) * 100 : 0;
-                    const color = Number(r.lph) < 13 ? "#10b981" : Number(r.lph) < 16 ? "#f59e0b" : "#ef4444";
-                    return (
-                      <div key={r.unidad}>
-                        <div className="flex justify-between text-xs font-mono mb-1">
-                          <span className="text-amber-400 font-bold">{r.unidad}</span>
-                          <span style={{ color }}>{r.lph} L/hr · {r.litros} L · {r.horas} hr</span>
-                        </div>
-                        <div className="h-2 bg-zinc-800 rounded overflow-hidden">
-                          <div className="h-full rounded transition-all" style={{ width: `${pct}%`, background: color }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <p className="text-xs text-zinc-700 font-mono">Verde &lt;13 L/hr · Ámbar 13–16 L/hr · Rojo &gt;16 L/hr</p>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               }
             </div>
+          </div>
+        )}
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest mb-3 font-mono">Rendimiento por Trabajo</p>
+        {/* ══════════ ENTRADAS ══════════ */}
+        {tab === "entrada" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={S.card}>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 20 }}>⛽ Registrar entrada de diesel</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div>
+                  <label style={S.label}>Fecha *</label>
+                  <input type="date" style={S.input} value={fe.fecha} onChange={e => setFe(p => ({ ...p, fecha: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={S.label}>Litros recibidos *</label>
+                  <input type="number" min="0" style={S.input} placeholder="0.0" value={fe.litros} onChange={e => setFe(p => ({ ...p, litros: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={S.label}>Proveedor</label>
+                  <input style={S.input} placeholder="Nombre del proveedor..." value={fe.proveedor} onChange={e => setFe(p => ({ ...p, proveedor: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={S.label}>No. Factura / Remisión</label>
+                  <input style={S.input} placeholder="F-0000" value={fe.factura} onChange={e => setFe(p => ({ ...p, factura: e.target.value }))} />
+                </div>
+                <div style={{ gridColumn: "span 2" }}>
+                  <label style={S.label}>Notas</label>
+                  <textarea style={{ ...S.input, resize: "none" }} rows={2} placeholder="Observaciones..." value={fe.notas} onChange={e => setFe(p => ({ ...p, notas: e.target.value }))} />
+                </div>
+              </div>
+              <button onClick={addEntrada} style={{ ...S.btn("green"), marginTop: 18 }}>
+                Registrar entrada
+              </button>
+            </div>
+
+            <div style={S.card}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Historial de entradas</div>
+              {entradas.length === 0
+                ? <div style={{ textAlign: "center", padding: "30px 0", color: "#52525b", fontSize: 14 }}>Sin entradas registradas aún.</div>
+                : <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid #27272a" }}>
+                        {["Fecha","Litros","Proveedor","Factura","Notas",""].map(h => (
+                          <th key={h} style={{ textAlign: "left", padding: "0 12px 10px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...entradas].reverse().map(e => (
+                        <tr key={e.id} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
+                          <td style={{ padding: "10px 12px 10px 0", color: "#71717a", whiteSpace: "nowrap" }}>{formatDate(e.fecha)}</td>
+                          <td style={{ padding: "10px 12px 10px 0", color: "#10b981", fontWeight: 700 }}>+{e.litros} L</td>
+                          <td style={{ padding: "10px 12px 10px 0", fontWeight: 500 }}>{e.proveedor || "—"}</td>
+                          <td style={{ padding: "10px 12px 10px 0", color: "#71717a" }}>{e.factura || "—"}</td>
+                          <td style={{ padding: "10px 12px 10px 0", color: "#52525b" }}>{e.notas || "—"}</td>
+                          <td style={{ padding: "10px 0" }}>
+                            <button onClick={() => delEntrada(e.id)} style={{ background: "none", border: "none", color: "#3f3f46", cursor: "pointer", fontSize: 14, padding: 4 }}>✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              }
+            </div>
+          </div>
+        )}
+
+        {/* ══════════ REPORTES ══════════ */}
+        {tab === "reportes" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+            {/* Resumen */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              {[
+                { label: "Entradas totales", value: `${totalEntradas.toLocaleString()} L`, color: "#3b82f6" },
+                { label: "Consumo total", value: `${totalConsumo.toLocaleString()} L`, color: "#f59e0b" },
+                { label: "Saldo", value: `${saldo >= 0 ? "+" : ""}${saldo.toLocaleString()} L`, color: saldo >= 0 ? "#10b981" : "#ef4444" },
+              ].map(s => (
+                <div key={s.label} style={{ background: "#18181b", borderRadius: 14, padding: "16px", border: `1px solid ${s.color}30`, textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#71717a", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{s.label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Rendimiento por unidad */}
+            <div style={S.card}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Rendimiento por unidad</div>
+              {rendimientos.length === 0
+                ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin datos aún.</div>
+                : <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {rendimientos.map(r => {
+                      const maxLph = Math.max(...rendimientos.map(x => Number(x.lph) || 0));
+                      const pct = maxLph > 0 ? (Number(r.lph) / maxLph) * 100 : 0;
+                      const color = lphColor(r.lph);
+                      return (
+                        <div key={r.unidad}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600 }}>{r.unidad}</span>
+                            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                              <span style={{ fontSize: 11, color: "#71717a" }}>{r.litros} L · {r.horas} hr</span>
+                              <LphBadge lph={r.lph} />
+                            </div>
+                          </div>
+                          <div style={{ height: 8, background: "#27272a", borderRadius: 99, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 99, transition: "width 0.6s ease" }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ marginTop: 14, fontSize: 11, color: "#3f3f46" }}>Verde &lt;13 L/hr · Ámbar 13-16 L/hr · Rojo &gt;16 L/hr</div>
+                </>
+              }
+            </div>
+
+            {/* Rendimiento por trabajo */}
+            <div style={S.card}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Rendimiento por tipo de trabajo</div>
               {rendTrabajo.length === 0
-                ? <p className="text-zinc-600 text-xs font-mono">Sin datos suficientes aún.</p>
-                : <table className="w-full text-xs font-mono">
-                  <thead><tr className="border-b border-zinc-800">
-                    {["Trabajo","Litros","Horas","L/hr promedio"].map(h => (
-                      <th key={h} className="text-left text-zinc-600 pb-2 pr-4 uppercase tracking-widest">{h}</th>
-                    ))}
-                  </tr></thead>
+                ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin datos suficientes.</div>
+                : <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #27272a" }}>
+                      {["Trabajo","Litros","Horas","L/hr"].map(h => (
+                        <th key={h} style={{ textAlign: "left", padding: "0 12px 10px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
                   <tbody>
                     {rendTrabajo.map(r => (
-                      <tr key={r.trabajo} className="border-b border-zinc-900 hover:bg-zinc-800/40">
-                        <td className="py-2 pr-4 text-blue-400 font-bold">{r.trabajo}</td>
-                        <td className="py-2 pr-4 text-zinc-300">{r.litros} L</td>
-                        <td className="py-2 pr-4 text-zinc-300">{r.horas} hr</td>
-                        <td className="py-2"><Badge color={Number(r.lph)<13?"green":Number(r.lph)<16?"amber":"red"}>{r.lph} L/hr</Badge></td>
+                      <tr key={r.trabajo} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
+                        <td style={{ padding: "10px 12px 10px 0" }}><WorkBadge trabajo={r.trabajo} /></td>
+                        <td style={{ padding: "10px 12px 10px 0", color: "#a1a1aa" }}>{r.litros} L</td>
+                        <td style={{ padding: "10px 12px 10px 0", color: "#a1a1aa" }}>{r.horas} hr</td>
+                        <td style={{ padding: "10px 0" }}><LphBadge lph={r.lph} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -756,29 +708,33 @@ export default function DieselControl() {
               }
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest mb-3 font-mono">Balance Detallado</p>
-              <div className="space-y-1 text-xs font-mono">
-                {[...entradas].sort((a,b) => new Date(a.fecha)-new Date(b.fecha)).map(e => (
-                  <div key={e.id} className="flex justify-between py-1 border-b border-zinc-900">
-                    <span className="text-zinc-600">{formatDate(e.fecha)} · {e.proveedor||"Entrada"}{e.factura&&` (${e.factura})`}</span>
-                    <span className="text-emerald-400">+{e.litros} L</span>
+            {/* Balance detallado */}
+            <div style={S.card}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Balance detallado</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {[
+                  ...[...entradas].map(e => ({ fecha: e.fecha, label: `${e.proveedor || "Entrada"}${e.factura ? ` (${e.factura})` : ""}`, litros: e.litros, tipo: "entrada" })),
+                  ...[...consumos].map(c => ({ fecha: c.fecha, label: `${c.unidad}${c.trabajo ? ` · ${c.trabajo}` : ""}`, litros: c.litros, tipo: "consumo" })),
+                ].sort((a, b) => new Date(a.fecha) - new Date(b.fecha)).map((item, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #1f1f22" }}>
+                    <div>
+                      <span style={{ fontSize: 12, color: "#52525b", marginRight: 8 }}>{formatDate(item.fecha)}</span>
+                      <span style={{ fontSize: 13 }}>{item.label}</span>
+                    </div>
+                    <span style={{ fontWeight: 700, fontSize: 13, color: item.tipo === "entrada" ? "#10b981" : "#ef4444", whiteSpace: "nowrap" }}>
+                      {item.tipo === "entrada" ? "+" : "-"}{item.litros} L
+                    </span>
                   </div>
                 ))}
-                {[...consumos].sort((a,b) => new Date(a.fecha)-new Date(b.fecha)).map(c => (
-                  <div key={c.id} className="flex justify-between py-1 border-b border-zinc-900">
-                    <span className="text-zinc-600">{formatDate(c.fecha)} · {c.unidad}{c.trabajo&&` · ${c.trabajo}`}</span>
-                    <span className="text-red-400">-{c.litros} L</span>
-                  </div>
-                ))}
-                <div className="flex justify-between py-2 mt-2 border-t border-zinc-700">
-                  <span className="text-zinc-400 font-bold uppercase tracking-widest">SALDO</span>
-                  <span className={`font-bold text-sm ${saldo >= 0 ? "text-emerald-400" : "text-red-400"}`}>{saldo >= 0 ? "+" : ""}{saldo} L</span>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0 0", marginTop: 4 }}>
+                  <span style={{ fontWeight: 800, fontSize: 14, textTransform: "uppercase", letterSpacing: "0.05em" }}>SALDO FINAL</span>
+                  <span style={{ fontWeight: 800, fontSize: 16, color: saldo >= 0 ? "#10b981" : "#ef4444" }}>{saldo >= 0 ? "+" : ""}{saldo.toLocaleString()} L</span>
                 </div>
               </div>
             </div>
           </div>
         )}
+
       </div>
       )}
     </div>

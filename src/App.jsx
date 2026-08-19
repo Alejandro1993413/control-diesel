@@ -15,7 +15,8 @@ const UNIDADES = [
   "Torton Ford Rojo","Torton Dina Gris",
   "Torton Dina Rojo","Torton Intl Blanco",
   "Piscadora John Deere 1","Piscadora John Deere 2",
-  "Nissan Frontier 2022"
+  "Nissan Frontier 2022",
+  "Camion algodonero #1"
 ];
 
 const CON_HOROMETRO = [
@@ -436,6 +437,9 @@ export default function DieselControl() {
                     </optgroup>
                     <optgroup label="── Camionetas ──">
                       {UNIDADES.filter(u => u.startsWith("Nissan")).map(u => <option key={u}>{u}</option>)}
+                    </optgroup>
+                    <optgroup label="── Camiones ──">
+                      {UNIDADES.filter(u => u.startsWith("Camion")).map(u => <option key={u}>{u}</option>)}
                     </optgroup>
                   </select>
                 </div>

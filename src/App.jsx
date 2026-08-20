@@ -25,9 +25,15 @@ const CON_HOROMETRO = [
   "Trilladora Lexion 560R","Trilladora JD 9779 STS"
 ];
 
+const CON_HECTAREAS = [
+  "Piscadora John Deere 1","Piscadora John Deere 2",
+  "Trilladora Lexion 560R","Trilladora JD 9779 STS"
+];
+
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxMLwUa1k9N5eFN6Qqcv6PEgla2pBJUr0GsfO2V2Pv1Sg2buQi0YEWE1hZ9rllfM6Xf/exec";
 
 function tieneHorometro(u) { return CON_HOROMETRO.includes(u); }
+function tieneHectareas(u) { return CON_HECTAREAS.includes(u); }
 
 function formatDate(d) {
   if (!d) return "—";
@@ -77,7 +83,7 @@ export default function DieselControl() {
   const initialFc = {
     fecha: "", unidad: "", litros: "", trabajo: "", notas: "",
     modoHoras: "horometro", horometroActual: "", horometroAnterior: "",
-    horasDirectas: "", naHoras: false, kilometraje: ""
+    horasDirectas: "", naHoras: false, kilometraje: "", hectareas: ""
   };
   const [fc, setFc] = useState(initialFc);
   const [fe, setFe] = useState({ fecha: "", litros: "", proveedor: "", factura: "", notas: "" });
@@ -140,6 +146,40 @@ export default function DieselControl() {
     }));
   }, [consumos]);
 
+  const rendUnidades = useMemo(() => {
+    const map = {};
+    consumos.forEach(c => {
+      if (!map[c.unidad]) map[c.unidad] = { litros: 0, horas: 0, ha: 0, registros: 0, trabajos: {} };
+      map[c.unidad].litros += Number(c.litros);
+      if (c.horas !== "N/A") map[c.unidad].horas += Number(c.horas);
+      if (c.hectareas) map[c.unidad].ha += Number(c.hectareas);
+      map[c.unidad].registros += 1;
+      if (c.trabajo) {
+        if (!map[c.unidad].trabajos[c.trabajo]) map[c.unidad].trabajos[c.trabajo] = { litros: 0, horas: 0, ha: 0 };
+        map[c.unidad].trabajos[c.trabajo].litros += Number(c.litros);
+        if (c.horas !== "N/A") map[c.unidad].trabajos[c.trabajo].horas += Number(c.horas);
+        if (c.hectareas) map[c.unidad].trabajos[c.trabajo].ha += Number(c.hectareas);
+      }
+    });
+    return Object.entries(map).map(([u, v]) => ({
+      unidad: u,
+      litros: v.litros,
+      horas: v.horas,
+      ha: v.ha,
+      registros: v.registros,
+      lph: v.horas > 0 ? (v.litros / v.horas).toFixed(2) : "-",
+      lpha: v.ha > 0 ? (v.litros / v.ha).toFixed(2) : "-",
+      trabajos: Object.entries(v.trabajos).map(([t, d]) => ({
+        trabajo: t,
+        litros: d.litros,
+        horas: d.horas,
+        ha: d.ha,
+        lph: d.horas > 0 ? (d.litros / d.horas).toFixed(2) : "-",
+        lpha: d.ha > 0 ? (d.litros / d.ha).toFixed(2) : "-",
+      }))
+    }));
+  }, [consumos]);
+
   const rendTrabajo = useMemo(() => {
     const map = {};
     consumos.forEach(c => {
@@ -161,7 +201,7 @@ export default function DieselControl() {
     const nuevo = {
       id: Date.now(), fecha: fc.fecha, unidad: fc.unidad,
       litros: Number(fc.litros), horas: horasCalculadas === "N/A" ? "N/A" : horasCalculadas,
-      trabajo: fc.trabajo || "", notas: fc.notas, kilometraje: fc.kilometraje || "",
+      trabajo: fc.trabajo || "", notas: fc.notas, kilometraje: fc.kilometraje || "", hectareas: fc.hectareas || "",
       modoHoras: fc.modoHoras,
       horometroActual: fc.modoHoras === "horometro" ? Number(fc.horometroActual) : "",
       horometroAnterior: fc.modoHoras === "horometro" ? Number(fc.horometroAnterior) : "",
@@ -226,6 +266,7 @@ export default function DieselControl() {
     { id: "consumo",   label: "Consumo", icon: "🛢" },
     { id: "entrada",   label: "Entradas", icon: "⛽" },
     { id: "reportes",  label: "Reportes", icon: "📋" },
+    { id: "unidades",  label: "Unidades", icon: "🚜" },
   ];
 
   const msgStyle = {
@@ -515,6 +556,13 @@ export default function DieselControl() {
                   <input type="number" min="0" style={S.input} placeholder="ej. 45200"
                     value={fc.kilometraje} onChange={e => setFc(p => ({ ...p, kilometraje: e.target.value }))} />
                 </div>
+                {tieneHectareas(fc.unidad) && (
+                  <div>
+                    <label style={S.label}>Hectáreas trabajadas <span style={{ color: "#3f3f46", textTransform: "none", fontWeight: 400 }}>(opcional)</span></label>
+                    <input type="number" min="0" step="0.1" style={S.input} placeholder="ej. 12.5"
+                      value={fc.hectareas} onChange={e => setFc(p => ({ ...p, hectareas: e.target.value }))} />
+                  </div>
+                )}
                 <div>
                   <label style={S.label}>Notas</label>
                   <textarea style={{ ...S.input, resize: "none", height: 42 }} rows={2} placeholder="Observaciones..."
@@ -736,6 +784,84 @@ export default function DieselControl() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ══════════ UNIDADES ══════════ */}
+        {tab === "unidades" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ fontSize: 13, color: "#71717a" }}>Consumo y rendimiento detallado por cada unidad registrada.</div>
+
+            {rendUnidades.length === 0
+              ? <div style={{ ...S.card, textAlign: "center", padding: "40px 0", color: "#52525b", fontSize: 14 }}>Sin registros aún.</div>
+              : rendUnidades.map(u => (
+                <div key={u.unidad} style={S.card}>
+                  {/* Header unidad */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 800 }}>{u.unidad}</div>
+                      <div style={{ fontSize: 12, color: "#71717a", marginTop: 2 }}>{u.registros} registro{u.registros !== 1 ? "s" : ""}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <div style={{ background: "#1c1400", border: "1px solid #854d0e40", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>Total consumido</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: "#f59e0b" }}>{u.litros.toLocaleString()} L</div>
+                      </div>
+                      <div style={{ background: "#0a1628", border: "1px solid #1d4ed840", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>Horas totales</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: "#60a5fa" }}>{u.horas} hr</div>
+                      </div>
+                      {u.lph !== "-" && (
+                        <div style={{ background: lphColor(u.lph) + "15", border: `1px solid ${lphColor(u.lph)}40`, borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                          <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>Rendimiento</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: lphColor(u.lph) }}>{u.lph} L/hr</div>
+                        </div>
+                      )}
+                      {u.ha > 0 && (
+                        <div style={{ background: "#0a1f0a", border: "1px solid #16653440", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                          <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>Ha trabajadas</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: "#34d399" }}>{u.ha} ha</div>
+                        </div>
+                      )}
+                      {u.lpha !== "-" && (
+                        <div style={{ background: "#0a1f0a", border: "1px solid #16653440", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                          <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>L/ha</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: "#34d399" }}>{u.lpha}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Trabajos de esta unidad */}
+                  {u.trabajos.length > 0 && (
+                    <>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Desglose por trabajo</div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid #27272a" }}>
+                            {["Trabajo","Litros","Horas","L/hr","Ha","L/ha"].map(h => (
+                              <th key={h} style={{ textAlign: "left", padding: "0 10px 8px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {u.trabajos.map(t => (
+                            <tr key={t.trabajo} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
+                              <td style={{ padding: "8px 10px 8px 0" }}><WorkBadge trabajo={t.trabajo} /></td>
+                              <td style={{ padding: "8px 10px 8px 0", color: "#f59e0b", fontWeight: 600 }}>{t.litros} L</td>
+                              <td style={{ padding: "8px 10px 8px 0", color: "#a1a1aa" }}>{t.horas > 0 ? `${t.horas} hr` : "—"}</td>
+                              <td style={{ padding: "8px 10px 8px 0" }}>{t.lph !== "-" ? <LphBadge lph={t.lph} /> : <span style={{ color: "#52525b" }}>—</span>}</td>
+                              <td style={{ padding: "8px 10px 8px 0", color: "#34d399" }}>{t.ha > 0 ? `${t.ha} ha` : "—"}</td>
+                              <td style={{ padding: "8px 0", color: "#34d399", fontWeight: 600 }}>{t.lpha !== "-" ? `${t.lpha} L/ha` : "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+                </div>
+              ))
+            }
           </div>
         )}
 

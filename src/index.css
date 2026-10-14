@@ -2,45 +2,119 @@
 body { background: #0f0f0f; }
 
 @media print {
-  /* Fondo blanco, texto negro */
-  body { background: #fff !important; color: #000 !important; font-family: Arial, sans-serif; font-size: 11pt; }
+  /* Reset total — blanco y negro */
+  *, *::before, *::after {
+    color: #000 !important;
+    background: #fff !important;
+    background-color: #fff !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    border-color: #bbb !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 
-  /* Ocultar nav, botones, formularios, tabs, balance detallado, sección edición */
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Ocultar todo lo que no es el reporte */
   nav, button, input, select, textarea,
   [data-noprint], .icon-btn,
   #tab-bar, #form-section, #entradas-section,
-  #balance-detallado { display: none !important; }
-
-  /* Solo mostrar la pestaña de reportes */
+  #balance-detallado,
   #tab-consumo, #tab-entrada, #tab-unidades, #tab-dashboard { display: none !important; }
 
-  /* Cards con borde simple */
-  [style*="border-radius: 18px"],
-  [style*="borderRadius: 18"] {
+  /* Contenedor principal sin padding lateral */
+  div[style*="maxWidth"] { max-width: 100% !important; padding: 0 !important; }
+
+  /* Cards: borde gris simple, sin fondo de color */
+  div[style*="borderRadius"] {
     border: 1px solid #ccc !important;
-    background: #fff !important;
-    box-shadow: none !important;
-    padding: 12pt !important;
-    margin-bottom: 12pt !important;
+    border-radius: 0 !important;
+    padding: 10pt 12pt !important;
+    margin-bottom: 10pt !important;
     break-inside: avoid;
+    page-break-inside: avoid;
   }
 
-  /* Texto oscuro */
-  * { color: #000 !important; background: transparent !important; border-color: #ccc !important; }
-
   /* Tablas */
-  table { width: 100%; border-collapse: collapse; }
-  th, td { border-bottom: 1px solid #ddd; padding: 5pt 8pt; text-align: left; font-size: 10pt; }
-  th { font-weight: bold; background: #f5f5f5 !important; color: #000 !important; }
+  table { width: 100% !important; border-collapse: collapse !important; margin-top: 6pt; }
+  th {
+    background: #eeeeee !important;
+    color: #000 !important;
+    font-size: 9pt !important;
+    font-weight: bold;
+    padding: 4pt 8pt !important;
+    border-bottom: 1.5px solid #888 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  td {
+    color: #000 !important;
+    font-size: 10pt !important;
+    padding: 5pt 8pt !important;
+    border-bottom: 1px solid #ddd !important;
+    vertical-align: middle;
+  }
 
-  /* Badges simples */
-  span[style*="borderRadius"] { border: 1px solid #999 !important; background: #f0f0f0 !important; color: #000 !important; padding: 1pt 4pt; border-radius: 3pt; }
-
-  /* Ocultar filas sin datos (—) */
-  .no-data-row { display: none !important; }
+  /* Badges — texto plano en PDF */
+  span {
+    background: transparent !important;
+    border: none !important;
+    color: #000 !important;
+    font-size: inherit !important;
+    padding: 0 !important;
+  }
 
   /* Encabezado del PDF */
-  #pdf-header { display: block !important; text-align: center; margin-bottom: 16pt; border-bottom: 2px solid #000; padding-bottom: 8pt; }
+  #pdf-header {
+    display: block !important;
+    background: #fff !important;
+    text-align: left;
+    margin-bottom: 14pt;
+    padding-bottom: 8pt;
+    border-bottom: 2px solid #000 !important;
+  }
+  #pdf-header div:first-child {
+    font-size: 16pt !important;
+    font-weight: bold !important;
+    color: #000 !important;
+  }
+  #pdf-header div:last-child {
+    font-size: 9pt !important;
+    color: #444 !important;
+    margin-top: 3pt;
+  }
 
-  @page { margin: 1.5cm; size: A4; }
+  /* Títulos de sección */
+  div[style*="fontWeight: 800"],
+  div[style*="fontWeight:800"] {
+    font-size: 11pt !important;
+    font-weight: bold !important;
+    color: #000 !important;
+    margin-bottom: 6pt !important;
+  }
+
+  /* Subtítulos / descripciones */
+  div[style*="color: \"#52525b\""],
+  div[style*="color:#52525b"] {
+    color: #555 !important;
+    font-size: 9pt !important;
+  }
+
+  /* Grid de resumen (Entradas / Consumo / Saldo) */
+  div[style*="gridTemplateColumns"] {
+    display: flex !important;
+    gap: 12pt !important;
+    margin-bottom: 10pt !important;
+  }
+
+  @page { margin: 1.8cm 1.5cm; size: A4 portrait; }
 }

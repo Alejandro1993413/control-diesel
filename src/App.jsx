@@ -284,12 +284,31 @@ export default function DieselControl() {
 
   function startEdit(c) {
     setEditingId(c.id);
-    setEditData({ trabajo: c.trabajo || "", notas: c.notas || "", hectareas: c.hectareas || "", viajes: c.viajes || "", kilometraje: c.kilometraje || "" });
+    setEditData({
+      trabajo: c.trabajo || "", notas: c.notas || "", hectareas: c.hectareas || "",
+      viajes: c.viajes || "", kilometraje: c.kilometraje || "",
+      horometroAnterior: c.horometroAnterior || "", horometroActual: c.horometroActual || "",
+      horasDirectas: c.modoHoras === "directas" ? (c.horas || "") : ""
+    });
   }
   function cancelEdit() { setEditingId(null); setEditData({}); }
 
   async function saveEdit(c) {
-    const updated = { ...c, ...editData };
+    // Recalcular horas según modo elegido en edición
+    const modoFinal = editData.modoHorasEdit || c.modoHoras;
+    let horas = c.horas;
+    if (tieneHorometro(c.unidad)) {
+      if (modoFinal === "horometro") {
+        const ha = Number(editData.horometroAnterior);
+        const hact = Number(editData.horometroActual);
+        if (hact > ha) horas = (hact - ha).toFixed(1);
+      } else {
+        horas = editData.horasDirectas || c.horas;
+      }
+    } else if (c.modoHoras === "directas") {
+      horas = editData.horasDirectas || c.horas;
+    }
+    const updated = { ...c, ...editData, horas, modoHoras: modoFinal };
     setConsumos(prev => prev.map(x => x.id === c.id ? updated : x));
     setEditingId(null);
     setSyncing(true);
@@ -697,6 +716,21 @@ export default function DieselControl() {
                               {isEditing
                                 ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                                     <input style={S.inputSm} placeholder="Notas..." value={editData.notas} onChange={e => setEditData(p => ({ ...p, notas: e.target.value }))} />
+                                    {tieneHorometro(c.unidad) && (<>
+                                      <select style={S.inputSm} value={editData.modoHorasEdit || c.modoHoras} onChange={e => setEditData(p => ({ ...p, modoHorasEdit: e.target.value }))}>
+                                        <option value="horometro">Horómetro</option>
+                                        <option value="directas">Horas directas</option>
+                                      </select>
+                                      {(editData.modoHorasEdit || c.modoHoras) === "horometro" ? (<>
+                                        <input type="number" style={S.inputSm} placeholder="Horóm. anterior" value={editData.horometroAnterior} onChange={e => setEditData(p => ({ ...p, horometroAnterior: e.target.value }))} />
+                                        <input type="number" style={S.inputSm} placeholder="Horóm. actual" value={editData.horometroActual} onChange={e => setEditData(p => ({ ...p, horometroActual: e.target.value }))} />
+                                      </>) : (
+                                        <input type="number" style={S.inputSm} placeholder="Horas directas" value={editData.horasDirectas} onChange={e => setEditData(p => ({ ...p, horasDirectas: e.target.value }))} />
+                                      )}
+                                    </>)}
+                                    {!tieneHorometro(c.unidad) && c.modoHoras === "directas" && (
+                                      <input type="number" style={S.inputSm} placeholder="Horas directas" value={editData.horasDirectas} onChange={e => setEditData(p => ({ ...p, horasDirectas: e.target.value }))} />
+                                    )}
                                     {tieneHectareas(c.unidad) && (
                                       <input type="number" style={S.inputSm} placeholder="Hectáreas" value={editData.hectareas} onChange={e => setEditData(p => ({ ...p, hectareas: e.target.value }))} />
                                     )}

@@ -1006,8 +1006,8 @@ export default function DieselControl() {
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {/* Encabezado solo visible en PDF */}
             <div id="pdf-header" style={{ display: "none" }}>
-              <div style={{ fontSize: 20, fontWeight: 800 }}>🌾 Grupo Ceballos — Control de Diesel</div>
-              <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>Reporte generado el {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</div>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>GRUPO CEBALLOS — CONTROL DE DIESEL</div>
+              <div style={{ fontSize: 12, color: "#444", marginTop: 4 }}>Reporte generado el {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</div>
             </div>
             {/* Botón exportar PDF */}
             <div style={{ display: "flex", justifyContent: "flex-end" }} data-noprint>

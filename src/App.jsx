@@ -5,7 +5,8 @@ const TRABAJOS = [
   "Cultivo zanjeadora", "Siembra", "Pisca algodon",
   "Trilla trigo", "Trilla Maiz", "Trilla Garbanzo",
   "Tumba de bordos con arado", "Tumba de bordos con canalera",
-  "Movimiento y compactacion modulador", "Traslado de modulos", "Varios"
+  "Movimiento y compactacion modulador", "Traslado de modulos",
+  "Desvare", "Varios"
 ];
 
 const UNIDADES = [
@@ -30,10 +31,18 @@ const CON_HECTAREAS = [
   "Trilladora Lexion 560R","Trilladora JD 9779 STS"
 ];
 
+// Unidades que cuentan por viaje
+const CON_VIAJES = [
+  "Torton Ford Rojo","Torton Dina Gris",
+  "Torton Dina Rojo","Torton Intl Blanco",
+  "Nissan Frontier 2022","Camion algodonero #1"
+];
+
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxMLwUa1k9N5eFN6Qqcv6PEgla2pBJUr0GsfO2V2Pv1Sg2buQi0YEWE1hZ9rllfM6Xf/exec";
 
 function tieneHorometro(u) { return CON_HOROMETRO.includes(u); }
 function tieneHectareas(u) { return CON_HECTAREAS.includes(u); }
+function tieneViajes(u)    { return CON_VIAJES.includes(u); }
 
 function formatDate(d) {
   if (!d) return "—";
@@ -63,6 +72,15 @@ function LphBadge({ lph }) {
   );
 }
 
+function ViajesBadge({ lpv }) {
+  if (!lpv || lpv === "-") return <span style={{ color: "#71717a", fontSize: 11 }}>—</span>;
+  return (
+    <span style={{ background: "#8b5cf620", color: "#a78bfa", border: "1px solid #8b5cf650", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+      {lpv} L/viaje
+    </span>
+  );
+}
+
 function WorkBadge({ trabajo }) {
   if (!trabajo) return <span style={{ color: "#52525b", fontSize: 11 }}>—</span>;
   return (
@@ -80,10 +98,15 @@ export default function DieselControl() {
   const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState({ text: "", type: "ok" });
 
+  // Estado de edición inline
+  const [editingId, setEditingId] = useState(null);
+  const [editData, setEditData] = useState({});
+
   const initialFc = {
     fecha: "", unidad: "", litros: "", trabajo: "", notas: "",
     modoHoras: "horometro", horometroActual: "", horometroAnterior: "",
-    horasDirectas: "", naHoras: false, kilometraje: "", hectareas: ""
+    horasDirectas: "", naHoras: false, kilometraje: "", hectareas: "",
+    viajes: ""
   };
   const [fc, setFc] = useState(initialFc);
   const [fe, setFe] = useState({ fecha: "", litros: "", proveedor: "", factura: "", notas: "" });
@@ -149,61 +172,84 @@ export default function DieselControl() {
   const rendUnidades = useMemo(() => {
     const map = {};
     consumos.forEach(c => {
-      if (!map[c.unidad]) map[c.unidad] = { litros: 0, horas: 0, ha: 0, registros: 0, trabajos: {} };
+      if (!map[c.unidad]) map[c.unidad] = { litros: 0, horas: 0, ha: 0, viajes: 0, registros: 0, trabajos: {} };
       map[c.unidad].litros += Number(c.litros);
       if (c.horas !== "N/A") map[c.unidad].horas += Number(c.horas);
       if (c.hectareas) map[c.unidad].ha += Number(c.hectareas);
+      if (c.viajes)    map[c.unidad].viajes += Number(c.viajes);
       map[c.unidad].registros += 1;
       if (c.trabajo) {
-        if (!map[c.unidad].trabajos[c.trabajo]) map[c.unidad].trabajos[c.trabajo] = { litros: 0, horas: 0, ha: 0 };
+        if (!map[c.unidad].trabajos[c.trabajo]) map[c.unidad].trabajos[c.trabajo] = { litros: 0, horas: 0, ha: 0, viajes: 0 };
         map[c.unidad].trabajos[c.trabajo].litros += Number(c.litros);
         if (c.horas !== "N/A") map[c.unidad].trabajos[c.trabajo].horas += Number(c.horas);
         if (c.hectareas) map[c.unidad].trabajos[c.trabajo].ha += Number(c.hectareas);
+        if (c.viajes)    map[c.unidad].trabajos[c.trabajo].viajes += Number(c.viajes);
       }
     });
     return Object.entries(map).map(([u, v]) => ({
-      unidad: u,
-      litros: v.litros,
-      horas: v.horas,
-      ha: v.ha,
-      registros: v.registros,
-      lph: v.horas > 0 ? (v.litros / v.horas).toFixed(2) : "-",
-      lpha: v.ha > 0 ? (v.litros / v.ha).toFixed(2) : "-",
+      unidad: u, litros: v.litros, horas: v.horas, ha: v.ha, viajes: v.viajes, registros: v.registros,
+      lph:  v.horas  > 0 ? (v.litros / v.horas).toFixed(2)  : "-",
+      lpha: v.ha     > 0 ? (v.litros / v.ha).toFixed(2)     : "-",
+      lpv:  v.viajes > 0 ? (v.litros / v.viajes).toFixed(2) : "-",
       trabajos: Object.entries(v.trabajos).map(([t, d]) => ({
-        trabajo: t,
-        litros: d.litros,
-        horas: d.horas,
-        ha: d.ha,
-        lph: d.horas > 0 ? (d.litros / d.horas).toFixed(2) : "-",
-        lpha: d.ha > 0 ? (d.litros / d.ha).toFixed(2) : "-",
+        trabajo: t, litros: d.litros, horas: d.horas, ha: d.ha, viajes: d.viajes,
+        lph:  d.horas  > 0 ? (d.litros / d.horas).toFixed(2)  : "-",
+        lpha: d.ha     > 0 ? (d.litros / d.ha).toFixed(2)     : "-",
+        lpv:  d.viajes > 0 ? (d.litros / d.viajes).toFixed(2) : "-",
       }))
     }));
   }, [consumos]);
 
-  const rendTrabajo = useMemo(() => {
+  // Tractores/Trilladoras: L/hr por trabajo
+  const rendTractoresPorTrabajo = useMemo(() => {
     const map = {};
     consumos.forEach(c => {
-      if (c.trabajo && c.trabajo !== "Varios") {
-        if (!map[c.trabajo]) map[c.trabajo] = { litros: 0, horas: 0 };
-        map[c.trabajo].litros += Number(c.litros);
-        if (c.horas !== "N/A") map[c.trabajo].horas += Number(c.horas);
-      }
+      if (!tieneHorometro(c.unidad) || c.horas === "N/A" || !c.horas) return;
+      const key = c.unidad + "||" + (c.trabajo || "Sin trabajo");
+      if (!map[key]) map[key] = { unidad: c.unidad, trabajo: c.trabajo || "Sin trabajo", litros: 0, horas: 0 };
+      map[key].litros += Number(c.litros);
+      map[key].horas  += Number(c.horas);
     });
-    return Object.entries(map).map(([t, v]) => ({
-      trabajo: t, litros: v.litros, horas: v.horas,
-      lph: v.horas > 0 ? (v.litros / v.horas).toFixed(2) : "-",
+    return Object.values(map)
+      .map(v => ({ ...v, lph: v.horas > 0 ? (v.litros / v.horas).toFixed(2) : "-" }))
+      .sort((a, b) => a.unidad.localeCompare(b.unidad));
+  }, [consumos]);
+
+  // Camiones: L/viaje
+  const rendCamionesPorViaje = useMemo(() => {
+    const map = {};
+    consumos.forEach(c => {
+      if (!tieneViajes(c.unidad)) return;
+      if (!map[c.unidad]) map[c.unidad] = { unidad: c.unidad, litros: 0, viajes: 0, registros: 0 };
+      map[c.unidad].litros   += Number(c.litros);
+      map[c.unidad].viajes   += Number(c.viajes || 0);
+      map[c.unidad].registros += 1;
+    });
+    return Object.values(map).map(v => ({
+      ...v, lpv: v.viajes > 0 ? (v.litros / v.viajes).toFixed(2) : "-"
     }));
   }, [consumos]);
 
+  // Auto-fill horómetro anterior
+  function getUltimoHorometro(unidad) {
+    const regs = consumos
+      .filter(c => c.unidad === unidad && c.modoHoras === "horometro" && c.horometroActual)
+      .sort((a, b) => Number(b.id) - Number(a.id));
+    return regs.length > 0 ? regs[0].horometroActual : "";
+  }
+
   async function addConsumo() {
     if (!fc.fecha || !fc.unidad || !fc.litros) { showMsg("Completa fecha, unidad y litros.", "warn"); return; }
-    if (horasCalculadas === null) { showMsg("Ingresa horómetro, horas o marca N/A.", "warn"); return; }
+    if (!tieneViajes(fc.unidad) && horasCalculadas === null) { showMsg("Ingresa horómetro, horas o marca N/A.", "warn"); return; }
     const nuevo = {
       id: Date.now(), fecha: fc.fecha, unidad: fc.unidad,
-      litros: Number(fc.litros), horas: horasCalculadas === "N/A" ? "N/A" : horasCalculadas,
-      trabajo: fc.trabajo || "", notas: fc.notas, kilometraje: fc.kilometraje || "", hectareas: fc.hectareas || "",
+      litros: Number(fc.litros),
+      horas: fc.naHoras ? "N/A" : (horasCalculadas ?? "N/A"),
+      trabajo: fc.trabajo || "", notas: fc.notas,
+      kilometraje: fc.kilometraje || "", hectareas: fc.hectareas || "",
+      viajes: fc.viajes || "",
       modoHoras: fc.modoHoras,
-      horometroActual: fc.modoHoras === "horometro" ? Number(fc.horometroActual) : "",
+      horometroActual:   fc.modoHoras === "horometro" ? Number(fc.horometroActual)   : "",
       horometroAnterior: fc.modoHoras === "horometro" ? Number(fc.horometroAnterior) : "",
     };
     setConsumos(prev => [...prev, nuevo]);
@@ -236,20 +282,42 @@ export default function DieselControl() {
     await api("deleteEntrada", { id });
   }
 
+  function startEdit(c) {
+    setEditingId(c.id);
+    setEditData({ trabajo: c.trabajo || "", notas: c.notas || "", hectareas: c.hectareas || "", viajes: c.viajes || "", kilometraje: c.kilometraje || "" });
+  }
+  function cancelEdit() { setEditingId(null); setEditData({}); }
+
+  async function saveEdit(c) {
+    const updated = { ...c, ...editData };
+    setConsumos(prev => prev.map(x => x.id === c.id ? updated : x));
+    setEditingId(null);
+    setSyncing(true);
+    await api("editConsumo", updated);
+    setSyncing(false);
+    showMsg("Registro actualizado.");
+  }
+
   function onSelectUnidad(unidad) {
+    const ultimo = tieneHorometro(unidad) ? getUltimoHorometro(unidad) : "";
     setFc(p => ({
       ...p, unidad,
       modoHoras: tieneHorometro(unidad) ? "horometro" : "directas",
-      horometroAnterior: "", horometroActual: "", horasDirectas: ""
+      horometroAnterior: ultimo,
+      horometroActual: "", horasDirectas: ""
     }));
   }
 
-  // ── Styles ──
   const S = {
     input: {
       width: "100%", background: "#18181b", border: "1.5px solid #3f3f46",
       color: "#f4f4f5", borderRadius: 10, padding: "10px 14px", fontSize: 14,
       outline: "none", transition: "border-color 0.2s", fontFamily: "inherit"
+    },
+    inputSm: {
+      background: "#09090b", border: "1.5px solid #3f3f46",
+      color: "#f4f4f5", borderRadius: 8, padding: "6px 10px", fontSize: 12,
+      outline: "none", fontFamily: "inherit", width: "100%"
     },
     label: { display: "block", fontSize: 11, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontWeight: 600 },
     card: { background: "#18181b", borderRadius: 16, padding: "20px 24px", border: "1px solid #27272a" },
@@ -262,8 +330,8 @@ export default function DieselControl() {
   };
 
   const tabs = [
-    { id: "dashboard", label: "Panel", icon: "📊" },
-    { id: "consumo",   label: "Consumo", icon: "🛢" },
+    { id: "dashboard", label: "Panel",    icon: "📊" },
+    { id: "consumo",   label: "Consumo",  icon: "🛢" },
     { id: "entrada",   label: "Entradas", icon: "⛽" },
     { id: "reportes",  label: "Reportes", icon: "📋" },
     { id: "unidades",  label: "Unidades", icon: "🚜" },
@@ -290,14 +358,17 @@ export default function DieselControl() {
         @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
         .fade { animation: fadeIn 0.25s ease; }
         .row-hover:hover { background: #27272a; }
+        .edit-row { background: #1a1a0a !important; }
         .tab-btn { border: none; cursor: pointer; transition: all 0.15s; background: transparent; }
         .tab-btn:hover { opacity: 0.85; }
         .pill-btn { border: 1.5px solid #3f3f46; background: #27272a; color: #a1a1aa; border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer; transition: all 0.15s; font-weight: 600; }
         .pill-btn:hover { border-color: #a1a1aa; color: #f4f4f5; }
         .pill-btn.active { background: #f59e0b; border-color: #f59e0b; color: #18181b; }
+        .icon-btn { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 6px; font-size: 13px; transition: background 0.15s; }
+        .icon-btn:hover { background: #27272a; }
       `}</style>
 
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <div style={{ background: "#18181b", borderBottom: "1px solid #27272a", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 38, height: 38, background: "linear-gradient(135deg,#f59e0b,#d97706)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>⛽</div>
@@ -321,7 +392,7 @@ export default function DieselControl() {
         </div>
       </div>
 
-      {/* ── TABS ── */}
+      {/* TABS */}
       <div style={{ background: "#18181b", borderBottom: "1px solid #27272a", padding: "0 16px", display: "flex", gap: 4, overflowX: "auto" }}>
         {tabs.map(t => (
           <button key={t.id} className="tab-btn" onClick={() => setTab(t.id)}
@@ -331,14 +402,12 @@ export default function DieselControl() {
         ))}
       </div>
 
-      {/* ── MSG ── */}
       {msg.text && (
         <div className="fade" style={{ margin: "16px 16px 0", padding: "10px 16px", borderRadius: 10, fontSize: 13, fontWeight: 500, ...msgStyle[msg.type] }}>
           {msg.text}
         </div>
       )}
 
-      {/* ── LOADING ── */}
       {loading && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 0", gap: 12, color: "#71717a" }}>
           <div className="spin" style={{ width: 22, height: 22, border: "3px solid #f59e0b", borderTopColor: "transparent", borderRadius: "50%" }} />
@@ -349,15 +418,13 @@ export default function DieselControl() {
       {!loading && (
       <div style={{ padding: "20px 16px", maxWidth: 900, margin: "0 auto" }} className="fade">
 
-        {/* ══════════ DASHBOARD ══════════ */}
+        {/* DASHBOARD */}
         {tab === "dashboard" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-
-            {/* Stat cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 }}>
               {[
-                { label: "Diesel recibido", value: `${totalEntradas.toLocaleString()} L`, sub: `${entradas.length} cargas`, color: "#3b82f6", icon: "⬆" },
-                { label: "Diesel consumido", value: `${totalConsumo.toLocaleString()} L`, sub: `${consumos.length} registros`, color: "#f59e0b", icon: "⬇" },
+                { label: "Diesel recibido",  value: `${totalEntradas.toLocaleString()} L`, sub: `${entradas.length} cargas`,   color: "#3b82f6", icon: "⬆" },
+                { label: "Diesel consumido", value: `${totalConsumo.toLocaleString()} L`,  sub: `${consumos.length} registros`, color: "#f59e0b", icon: "⬇" },
                 { label: "Saldo disponible", value: `${saldo.toLocaleString()} L`, sub: saldo >= 0 ? "En existencia" : "¡DÉFICIT!", color: saldo >= 100 ? "#10b981" : "#ef4444", icon: saldo >= 0 ? "✓" : "!" },
                 { label: "Unidades activas", value: rendimientos.length, sub: "con registros", color: "#8b5cf6", icon: "🚜" },
               ].map(s => (
@@ -370,7 +437,6 @@ export default function DieselControl() {
               ))}
             </div>
 
-            {/* Barra de balance */}
             <div style={S.card}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa" }}>Balance de combustible</span>
@@ -384,7 +450,6 @@ export default function DieselControl() {
               </div>
             </div>
 
-            {/* Rendimiento unidades */}
             {rendimientos.length > 0 && (
               <div style={S.card}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Rendimiento por unidad</div>
@@ -413,7 +478,6 @@ export default function DieselControl() {
               </div>
             )}
 
-            {/* Últimos movimientos */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div style={S.card}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 12 }}>Últimos consumos</div>
@@ -450,7 +514,7 @@ export default function DieselControl() {
           </div>
         )}
 
-        {/* ══════════ CONSUMO ══════════ */}
+        {/* CONSUMO */}
         {tab === "consumo" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div style={S.card}>
@@ -495,10 +559,17 @@ export default function DieselControl() {
                     {TRABAJOS.map(t => <option key={t}>{t}</option>)}
                   </select>
                 </div>
+
+                {fc.unidad && tieneViajes(fc.unidad) && (
+                  <div>
+                    <label style={S.label}>Viajes realizados <span style={{ color: "#3f3f46", textTransform: "none", fontWeight: 400 }}>(opcional)</span></label>
+                    <input type="number" min="0" step="1" style={S.input} placeholder="ej. 3"
+                      value={fc.viajes} onChange={e => setFc(p => ({ ...p, viajes: e.target.value }))} />
+                  </div>
+                )}
               </div>
 
-              {/* Horómetro */}
-              {fc.unidad && (
+              {fc.unidad && !tieneViajes(fc.unidad) && (
                 <div style={{ marginTop: 16, background: "#09090b", borderRadius: 12, padding: 16, border: "1px solid #27272a" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em" }}>Horas de trabajo</span>
@@ -524,12 +595,18 @@ export default function DieselControl() {
                   ) : fc.modoHoras === "horometro" ? (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       <div>
-                        <label style={S.label}>Horómetro anterior</label>
-                        <input type="number" min="0" step="0.1" style={S.input} placeholder="ej. 4520.0"
-                          value={fc.horometroAnterior} onChange={e => setFc(p => ({ ...p, horometroAnterior: e.target.value }))} />
+                        <label style={S.label}>Horómetro anterior <span style={{ color: "#f59e0b", fontWeight: 400, textTransform: "none", fontSize: 10 }}>(auto)</span></label>
+                        <input type="number" min="0" step="0.1"
+                          style={{ ...S.input, background: fc.horometroAnterior ? "#1a1a0a" : "#18181b" }}
+                          placeholder="Auto-detectado"
+                          value={fc.horometroAnterior}
+                          onChange={e => setFc(p => ({ ...p, horometroAnterior: e.target.value }))} />
+                        {fc.horometroAnterior && (
+                          <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 3 }}>Del último registro — puedes editarlo</div>
+                        )}
                       </div>
                       <div>
-                        <label style={S.label}>Horómetro actual</label>
+                        <label style={S.label}>Horómetro actual *</label>
                         <input type="number" min="0" step="0.1" style={S.input} placeholder="ej. 4528.5"
                           value={fc.horometroActual} onChange={e => setFc(p => ({ ...p, horometroActual: e.target.value }))} />
                       </div>
@@ -575,40 +652,81 @@ export default function DieselControl() {
               </button>
             </div>
 
-            {/* Historial consumos */}
+            {/* Historial con edición inline */}
             <div style={S.card}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Historial de consumos</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 4 }}>Historial de consumos</div>
+              <div style={{ fontSize: 11, color: "#52525b", marginBottom: 14 }}>Toca ✏️ para editar trabajo, notas, hectáreas o viajes de un registro.</div>
               {consumos.length === 0
-                ? <div style={{ textAlign: "center", padding: "30px 0", color: "#52525b", fontSize: 14 }}>Sin registros aún. Agrega tu primer consumo arriba.</div>
+                ? <div style={{ textAlign: "center", padding: "30px 0", color: "#52525b", fontSize: 14 }}>Sin registros aún.</div>
                 : <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid #27272a" }}>
-                        {["Fecha","Unidad","Litros","Horómetro","Horas","L/Hr","Trabajo","Km",""].map(h => (
-                          <th key={h} style={{ textAlign: "left", padding: "0 12px 10px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>{h}</th>
+                        {["Fecha","Unidad","Litros","Horas","L/Hr","Trabajo","Notas / Extra",""].map(h => (
+                          <th key={h} style={{ textAlign: "left", padding: "0 10px 10px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {[...consumos].reverse().map(c => (
-                        <tr key={c.id} className="row-hover" style={{ borderBottom: "1px solid #1f1f22", transition: "background 0.15s" }}>
-                          <td style={{ padding: "10px 12px 10px 0", color: "#71717a", whiteSpace: "nowrap" }}>{formatDate(c.fecha)}</td>
-                          <td style={{ padding: "10px 12px 10px 0", fontWeight: 600, whiteSpace: "nowrap" }}>{c.unidad}</td>
-                          <td style={{ padding: "10px 12px 10px 0", color: "#ef4444", fontWeight: 700 }}>{c.litros} L</td>
-                          <td style={{ padding: "10px 12px 10px 0", color: "#52525b", fontSize: 12, whiteSpace: "nowrap" }}>
-                            {c.modoHoras === "horometro" && c.horometroAnterior ? `${c.horometroAnterior}→${c.horometroActual}` : "—"}
-                          </td>
-                          <td style={{ padding: "10px 12px 10px 0", color: "#a1a1aa" }}>{c.horas === "N/A" ? "N/A" : `${c.horas} hr`}</td>
-                          <td style={{ padding: "10px 12px 10px 0" }}>
-                            {c.horas === "N/A" ? <span style={{ color: "#52525b", fontSize: 11 }}>N/A</span> : <LphBadge lph={(c.litros / c.horas).toFixed(1)} />}
-                          </td>
-                          <td style={{ padding: "10px 12px 10px 0" }}><WorkBadge trabajo={c.trabajo} /></td>
-                          <td style={{ padding: "10px 12px 10px 0", color: "#52525b", fontSize: 12 }}>{c.kilometraje ? `${Number(c.kilometraje).toLocaleString()} km` : "—"}</td>
-                          <td style={{ padding: "10px 0" }}>
-                            <button onClick={() => delConsumo(c.id)} style={{ background: "none", border: "none", color: "#3f3f46", cursor: "pointer", fontSize: 14, padding: 4 }}>✕</button>
-                          </td>
-                        </tr>
-                      ))}
+                      {[...consumos].reverse().map(c => {
+                        const isEditing = editingId === c.id;
+                        const lph = c.horas !== "N/A" && c.horas > 0 ? (c.litros / c.horas).toFixed(1) : null;
+                        const lpv = c.viajes > 0 ? (c.litros / c.viajes).toFixed(1) : null;
+                        return (
+                          <tr key={c.id} className={isEditing ? "edit-row" : "row-hover"} style={{ borderBottom: "1px solid #1f1f22", transition: "background 0.15s" }}>
+                            <td style={{ padding: "10px 10px 10px 0", color: "#71717a", whiteSpace: "nowrap", fontSize: 12 }}>{formatDate(c.fecha)}</td>
+                            <td style={{ padding: "10px 10px 10px 0", fontWeight: 600, fontSize: 12, whiteSpace: "nowrap" }}>{c.unidad}</td>
+                            <td style={{ padding: "10px 10px 10px 0", color: "#ef4444", fontWeight: 700 }}>{c.litros} L</td>
+                            <td style={{ padding: "10px 10px 10px 0", color: "#a1a1aa", fontSize: 12 }}>
+                              {c.horas === "N/A" ? "N/A" : c.horas ? `${c.horas} hr` : "—"}
+                              {c.viajes ? <span style={{ color: "#a78bfa", marginLeft: 4, fontSize: 11 }}>{c.viajes} v</span> : null}
+                            </td>
+                            <td style={{ padding: "10px 10px 10px 0" }}>
+                              {lph ? <LphBadge lph={lph} /> : lpv ? <ViajesBadge lpv={lpv} /> : <span style={{ color: "#52525b", fontSize: 11 }}>—</span>}
+                            </td>
+                            <td style={{ padding: "10px 10px 10px 0", minWidth: 130 }}>
+                              {isEditing
+                                ? <select style={S.inputSm} value={editData.trabajo} onChange={e => setEditData(p => ({ ...p, trabajo: e.target.value }))}>
+                                    <option value="">Sin especificar</option>
+                                    {TRABAJOS.map(t => <option key={t}>{t}</option>)}
+                                  </select>
+                                : <WorkBadge trabajo={c.trabajo} />
+                              }
+                            </td>
+                            <td style={{ padding: "10px 10px 10px 0", minWidth: 150 }}>
+                              {isEditing
+                                ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                    <input style={S.inputSm} placeholder="Notas..." value={editData.notas} onChange={e => setEditData(p => ({ ...p, notas: e.target.value }))} />
+                                    {tieneHectareas(c.unidad) && (
+                                      <input type="number" style={S.inputSm} placeholder="Hectáreas" value={editData.hectareas} onChange={e => setEditData(p => ({ ...p, hectareas: e.target.value }))} />
+                                    )}
+                                    {tieneViajes(c.unidad) && (
+                                      <input type="number" style={S.inputSm} placeholder="Viajes" value={editData.viajes} onChange={e => setEditData(p => ({ ...p, viajes: e.target.value }))} />
+                                    )}
+                                  </div>
+                                : <span style={{ fontSize: 12, color: "#52525b" }}>
+                                    {c.notas || "—"}
+                                    {c.hectareas ? <span style={{ color: "#34d399", marginLeft: 6 }}>{c.hectareas} ha</span> : null}
+                                    {c.kilometraje ? <span style={{ color: "#71717a", marginLeft: 6 }}>{Number(c.kilometraje).toLocaleString()} km</span> : null}
+                                  </span>
+                              }
+                            </td>
+                            <td style={{ padding: "10px 0", whiteSpace: "nowrap" }}>
+                              {isEditing ? (
+                                <div style={{ display: "flex", gap: 4 }}>
+                                  <button className="icon-btn" title="Guardar" onClick={() => saveEdit(c)} style={{ color: "#10b981", fontSize: 16 }}>✓</button>
+                                  <button className="icon-btn" title="Cancelar" onClick={cancelEdit} style={{ color: "#71717a" }}>✕</button>
+                                </div>
+                              ) : (
+                                <div style={{ display: "flex", gap: 2 }}>
+                                  <button className="icon-btn" title="Editar" onClick={() => startEdit(c)}>✏️</button>
+                                  <button className="icon-btn" title="Eliminar" onClick={() => delConsumo(c.id)} style={{ color: "#3f3f46" }}>✕</button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -617,7 +735,7 @@ export default function DieselControl() {
           </div>
         )}
 
-        {/* ══════════ ENTRADAS ══════════ */}
+        {/* ENTRADAS */}
         {tab === "entrada" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div style={S.card}>
@@ -644,9 +762,7 @@ export default function DieselControl() {
                   <textarea style={{ ...S.input, resize: "none" }} rows={2} placeholder="Observaciones..." value={fe.notas} onChange={e => setFe(p => ({ ...p, notas: e.target.value }))} />
                 </div>
               </div>
-              <button onClick={addEntrada} style={{ ...S.btn("green"), marginTop: 18 }}>
-                Registrar entrada
-              </button>
+              <button onClick={addEntrada} style={{ ...S.btn("green"), marginTop: 18 }}>Registrar entrada</button>
             </div>
 
             <div style={S.card}>
@@ -683,16 +799,14 @@ export default function DieselControl() {
           </div>
         )}
 
-        {/* ══════════ REPORTES ══════════ */}
+        {/* REPORTES */}
         {tab === "reportes" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-
-            {/* Resumen */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               {[
                 { label: "Entradas totales", value: `${totalEntradas.toLocaleString()} L`, color: "#3b82f6" },
-                { label: "Consumo total", value: `${totalConsumo.toLocaleString()} L`, color: "#f59e0b" },
-                { label: "Saldo", value: `${saldo >= 0 ? "+" : ""}${saldo.toLocaleString()} L`, color: saldo >= 0 ? "#10b981" : "#ef4444" },
+                { label: "Consumo total",     value: `${totalConsumo.toLocaleString()} L`,  color: "#f59e0b" },
+                { label: "Saldo",             value: `${saldo >= 0 ? "+" : ""}${saldo.toLocaleString()} L`, color: saldo >= 0 ? "#10b981" : "#ef4444" },
               ].map(s => (
                 <div key={s.label} style={{ background: "#18181b", borderRadius: 14, padding: "16px", border: `1px solid ${s.color}30`, textAlign: "center" }}>
                   <div style={{ fontSize: 11, color: "#71717a", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{s.label}</div>
@@ -701,58 +815,67 @@ export default function DieselControl() {
               ))}
             </div>
 
-            {/* Rendimiento por unidad */}
+            {/* Tractores: L/hr por trabajo */}
             <div style={S.card}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Rendimiento por unidad</div>
-              {rendimientos.length === 0
-                ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin datos aún.</div>
-                : <>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                    {rendimientos.map(r => {
-                      const maxLph = Math.max(...rendimientos.map(x => Number(x.lph) || 0));
-                      const pct = maxLph > 0 ? (Number(r.lph) / maxLph) * 100 : 0;
-                      const color = lphColor(r.lph);
-                      return (
-                        <div key={r.unidad}>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600 }}>{r.unidad}</span>
-                            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                              <span style={{ fontSize: 11, color: "#71717a" }}>{r.litros} L · {r.horas} hr</span>
-                              <LphBadge lph={r.lph} />
-                            </div>
-                          </div>
-                          <div style={{ height: 8, background: "#27272a", borderRadius: 99, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 99, transition: "width 0.6s ease" }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{ marginTop: 14, fontSize: 11, color: "#3f3f46" }}>Verde &lt;13 L/hr · Ámbar 13-16 L/hr · Rojo &gt;16 L/hr</div>
-                </>
+              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚜 Tractores y Trilladoras — L/hr por trabajo</div>
+              <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>Rendimiento de cada unidad desglosado por tipo de trabajo.</div>
+              {rendTractoresPorTrabajo.length === 0
+                ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin datos suficientes. Registra consumos con horómetro.</div>
+                : (() => {
+                    const byUnidad = {};
+                    rendTractoresPorTrabajo.forEach(r => {
+                      if (!byUnidad[r.unidad]) byUnidad[r.unidad] = [];
+                      byUnidad[r.unidad].push(r);
+                    });
+                    return Object.entries(byUnidad).map(([unidad, rows]) => (
+                      <div key={unidad} style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b", marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #27272a" }}>{unidad}</div>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                          <thead>
+                            <tr>
+                              {["Trabajo","Litros","Horas","L/hr"].map(h => (
+                                <th key={h} style={{ textAlign: "left", padding: "0 12px 8px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map(r => (
+                              <tr key={r.trabajo} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
+                                <td style={{ padding: "8px 12px 8px 0" }}><WorkBadge trabajo={r.trabajo} /></td>
+                                <td style={{ padding: "8px 12px 8px 0", color: "#a1a1aa" }}>{r.litros} L</td>
+                                <td style={{ padding: "8px 12px 8px 0", color: "#a1a1aa" }}>{r.horas} hr</td>
+                                <td style={{ padding: "8px 0" }}><LphBadge lph={r.lph} /></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ));
+                  })()
               }
             </div>
 
-            {/* Rendimiento por trabajo */}
+            {/* Camiones: L/viaje */}
             <div style={S.card}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Rendimiento por tipo de trabajo</div>
-              {rendTrabajo.length === 0
-                ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin datos suficientes.</div>
+              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚛 Camiones y Transporte — L/viaje</div>
+              <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>Consumo promedio por viaje realizado.</div>
+              {rendCamionesPorViaje.length === 0
+                ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin datos. Registra consumos con número de viajes.</div>
                 : <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #27272a" }}>
-                      {["Trabajo","Litros","Horas","L/hr"].map(h => (
+                      {["Unidad","Litros totales","Viajes","L/viaje"].map(h => (
                         <th key={h} style={{ textAlign: "left", padding: "0 12px 10px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {rendTrabajo.map(r => (
-                      <tr key={r.trabajo} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
-                        <td style={{ padding: "10px 12px 10px 0" }}><WorkBadge trabajo={r.trabajo} /></td>
-                        <td style={{ padding: "10px 12px 10px 0", color: "#a1a1aa" }}>{r.litros} L</td>
-                        <td style={{ padding: "10px 12px 10px 0", color: "#a1a1aa" }}>{r.horas} hr</td>
-                        <td style={{ padding: "10px 0" }}><LphBadge lph={r.lph} /></td>
+                    {rendCamionesPorViaje.map(r => (
+                      <tr key={r.unidad} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
+                        <td style={{ padding: "10px 12px 10px 0", fontWeight: 600 }}>{r.unidad}</td>
+                        <td style={{ padding: "10px 12px 10px 0", color: "#f59e0b", fontWeight: 700 }}>{r.litros} L</td>
+                        <td style={{ padding: "10px 12px 10px 0", color: "#a1a1aa" }}>{r.viajes}</td>
+                        <td style={{ padding: "10px 0" }}><ViajesBadge lpv={r.lpv} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -787,16 +910,14 @@ export default function DieselControl() {
           </div>
         )}
 
-        {/* ══════════ UNIDADES ══════════ */}
+        {/* UNIDADES */}
         {tab === "unidades" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div style={{ fontSize: 13, color: "#71717a" }}>Consumo y rendimiento detallado por cada unidad registrada.</div>
-
             {rendUnidades.length === 0
               ? <div style={{ ...S.card, textAlign: "center", padding: "40px 0", color: "#52525b", fontSize: 14 }}>Sin registros aún.</div>
               : rendUnidades.map(u => (
                 <div key={u.unidad} style={S.card}>
-                  {/* Header unidad */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
                     <div>
                       <div style={{ fontSize: 16, fontWeight: 800 }}>{u.unidad}</div>
@@ -807,14 +928,28 @@ export default function DieselControl() {
                         <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>Total consumido</div>
                         <div style={{ fontSize: 18, fontWeight: 800, color: "#f59e0b" }}>{u.litros.toLocaleString()} L</div>
                       </div>
-                      <div style={{ background: "#0a1628", border: "1px solid #1d4ed840", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
-                        <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>Horas totales</div>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: "#60a5fa" }}>{u.horas} hr</div>
-                      </div>
+                      {u.horas > 0 && (
+                        <div style={{ background: "#0a1628", border: "1px solid #1d4ed840", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                          <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>Horas totales</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: "#60a5fa" }}>{u.horas} hr</div>
+                        </div>
+                      )}
+                      {u.viajes > 0 && (
+                        <div style={{ background: "#1a0a2e", border: "1px solid #8b5cf640", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                          <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>Viajes</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: "#a78bfa" }}>{u.viajes}</div>
+                        </div>
+                      )}
                       {u.lph !== "-" && (
                         <div style={{ background: lphColor(u.lph) + "15", border: `1px solid ${lphColor(u.lph)}40`, borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
-                          <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>Rendimiento</div>
-                          <div style={{ fontSize: 18, fontWeight: 800, color: lphColor(u.lph) }}>{u.lph} L/hr</div>
+                          <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>L/hr</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: lphColor(u.lph) }}>{u.lph}</div>
+                        </div>
+                      )}
+                      {u.lpv !== "-" && (
+                        <div style={{ background: "#1a0a2e", border: "1px solid #8b5cf640", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                          <div style={{ fontSize: 11, color: "#71717a", marginBottom: 2 }}>L/viaje</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: "#a78bfa" }}>{u.lpv}</div>
                         </div>
                       )}
                       {u.ha > 0 && (
@@ -832,14 +967,13 @@ export default function DieselControl() {
                     </div>
                   </div>
 
-                  {/* Trabajos de esta unidad */}
                   {u.trabajos.length > 0 && (
                     <>
                       <div style={{ fontSize: 12, fontWeight: 700, color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Desglose por trabajo</div>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                         <thead>
                           <tr style={{ borderBottom: "1px solid #27272a" }}>
-                            {["Trabajo","Litros","Horas","L/hr","Ha","L/ha"].map(h => (
+                            {["Trabajo","Litros","Horas","L/hr","Viajes","L/viaje","Ha","L/ha"].map(h => (
                               <th key={h} style={{ textAlign: "left", padding: "0 10px 8px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                             ))}
                           </tr>
@@ -851,6 +985,8 @@ export default function DieselControl() {
                               <td style={{ padding: "8px 10px 8px 0", color: "#f59e0b", fontWeight: 600 }}>{t.litros} L</td>
                               <td style={{ padding: "8px 10px 8px 0", color: "#a1a1aa" }}>{t.horas > 0 ? `${t.horas} hr` : "—"}</td>
                               <td style={{ padding: "8px 10px 8px 0" }}>{t.lph !== "-" ? <LphBadge lph={t.lph} /> : <span style={{ color: "#52525b" }}>—</span>}</td>
+                              <td style={{ padding: "8px 10px 8px 0", color: "#a78bfa" }}>{t.viajes > 0 ? t.viajes : "—"}</td>
+                              <td style={{ padding: "8px 10px 8px 0" }}>{t.lpv !== "-" ? <ViajesBadge lpv={t.lpv} /> : <span style={{ color: "#52525b" }}>—</span>}</td>
                               <td style={{ padding: "8px 10px 8px 0", color: "#34d399" }}>{t.ha > 0 ? `${t.ha} ha` : "—"}</td>
                               <td style={{ padding: "8px 0", color: "#34d399", fontWeight: 600 }}>{t.lpha !== "-" ? `${t.lpha} L/ha` : "—"}</td>
                             </tr>

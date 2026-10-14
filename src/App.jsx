@@ -31,11 +31,16 @@ const CON_HECTAREAS = [
   "Trilladora Lexion 560R","Trilladora JD 9779 STS"
 ];
 
-// Unidades que cuentan por viaje
+// Unidades que cuentan por viaje (Nissan Frontier excluida de reportes de camiones)
 const CON_VIAJES = [
   "Torton Ford Rojo","Torton Dina Gris",
   "Torton Dina Rojo","Torton Intl Blanco",
   "Nissan Frontier 2022","Camion algodonero #1"
+];
+const CAMIONES_REPORTE = [
+  "Torton Ford Rojo","Torton Dina Gris",
+  "Torton Dina Rojo","Torton Intl Blanco",
+  "Camion algodonero #1"
 ];
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxH2lZn2BBeQasU7VlbR3F0nVS_bErNO9PkTKS5vwGv0EQXbat0RcNCJU45ZWW_uuiu/exec";
@@ -157,6 +162,72 @@ function MaquinaHaCard({ titulo, emoji, cultivos, unidades, storagePrefix, consu
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function CamionesViajeCard({ consumos }) {
+  const initViajes = () => {
+    const obj = {};
+    CAMIONES_REPORTE.forEach(u => { try { obj[u] = localStorage.getItem(`camion_viajes_${u}`) || ""; } catch { obj[u] = ""; } });
+    return obj;
+  };
+  const [viajesMap, setViajesMap] = useState(initViajes);
+
+  function setViajes(unidad, val) {
+    setViajesMap(p => ({ ...p, [unidad]: val }));
+    try { localStorage.setItem(`camion_viajes_${unidad}`, val); } catch {}
+  }
+
+  const rows = CAMIONES_REPORTE.map(unidad => {
+    const litros = consumos.filter(c => c.unidad === unidad).reduce((s, c) => s + Number(c.litros || 0), 0);
+    // Viajes: suma los registrados + los ingresados manualmente
+    const viajesRegistrados = consumos.filter(c => c.unidad === unidad).reduce((s, c) => s + Number(c.viajes || 0), 0);
+    const viajesManuales = Number(viajesMap[unidad]) || 0;
+    const viajesTotal = viajesRegistrados + viajesManuales;
+    const lpv = viajesTotal > 0 ? (litros / viajesTotal).toFixed(1) : null;
+    return { unidad, litros, viajesRegistrados, viajesManuales, viajesTotal, lpv };
+  }).filter(r => r.litros > 0);
+
+  return (
+    <div style={{ background: "#111113", border: "1px solid #27272a", borderRadius: 18, padding: "20px" }}>
+      <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚛 Camiones — L/viaje</div>
+      <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>
+        Si no registraste viajes por carga, ingrésalos manualmente en "Viajes extra". Se suman a los registrados.
+      </div>
+      {rows.length === 0
+        ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin registros de camiones aún.</div>
+        : <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid #27272a" }}>
+              {["Unidad","Litros","Viajes reg.","Viajes extra","Total viajes","L/viaje"].map(h => (
+                <th key={h} style={{ textAlign: "left", padding: "0 10px 8px 0", fontSize: 10, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.unidad} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
+                <td style={{ padding: "10px 10px 10px 0", fontWeight: 600, fontSize: 12 }}>{r.unidad}</td>
+                <td style={{ padding: "10px 10px 10px 0", color: "#f59e0b", fontWeight: 700 }}>{r.litros} L</td>
+                <td style={{ padding: "10px 10px 10px 0", color: "#a1a1aa" }}>{r.viajesRegistrados || "—"}</td>
+                <td style={{ padding: "10px 10px 10px 0" }}>
+                  <input type="number" style={{ background: "#27272a", border: "1px solid #3f3f46", borderRadius: 6, color: "#f4f4f5", padding: "4px 8px", fontSize: 12, width: 70 }}
+                    placeholder="0" value={viajesMap[r.unidad]}
+                    onChange={e => setViajes(r.unidad, e.target.value)} />
+                </td>
+                <td style={{ padding: "10px 10px 10px 0", fontWeight: 700 }}>{r.viajesTotal || "—"}</td>
+                <td style={{ padding: "10px 0" }}>
+                  {r.lpv
+                    ? <ViajesBadge lpv={r.lpv} />
+                    : <span style={{ color: "#52525b", fontSize: 11 }}>—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      }
+      <div style={{ fontSize: 11, color: "#3f3f46", marginTop: 12 }}>* Los viajes extra se guardan en este dispositivo.</div>
     </div>
   );
 }
@@ -933,6 +1004,17 @@ export default function DieselControl() {
         {/* REPORTES */}
         {tab === "reportes" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* Encabezado solo visible en PDF */}
+            <div id="pdf-header" style={{ display: "none" }}>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>🌾 Grupo Ceballos — Control de Diesel</div>
+              <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>Reporte generado el {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</div>
+            </div>
+            {/* Botón exportar PDF */}
+            <div style={{ display: "flex", justifyContent: "flex-end" }} data-noprint>
+              <button onClick={() => window.print()} style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #1d4ed840", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                📄 Exportar PDF
+              </button>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               {[
                 { label: "Entradas totales", value: `${totalEntradas.toLocaleString()} L`, color: "#3b82f6" },
@@ -990,35 +1072,10 @@ export default function DieselControl() {
             <TrilladorasHaCard consumos={consumos} />
 
             {/* Camiones: L/viaje */}
-            <div style={S.card}>
-              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚛 Camiones y Transporte — L/viaje</div>
-              <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>Consumo promedio por viaje realizado.</div>
-              {rendCamionesPorViaje.length === 0
-                ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin datos. Registra consumos con número de viajes.</div>
-                : <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #27272a" }}>
-                      {["Unidad","Litros totales","Viajes","L/viaje"].map(h => (
-                        <th key={h} style={{ textAlign: "left", padding: "0 12px 10px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rendCamionesPorViaje.map(r => (
-                      <tr key={r.unidad} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
-                        <td style={{ padding: "10px 12px 10px 0", fontWeight: 600 }}>{r.unidad}</td>
-                        <td style={{ padding: "10px 12px 10px 0", color: "#f59e0b", fontWeight: 700 }}>{r.litros} L</td>
-                        <td style={{ padding: "10px 12px 10px 0", color: "#a1a1aa" }}>{r.viajes}</td>
-                        <td style={{ padding: "10px 0" }}><ViajesBadge lpv={r.lpv} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              }
-            </div>
+            <CamionesViajeCard consumos={consumos} />
 
-            {/* Balance detallado */}
-            <div style={S.card}>
+            {/* Balance detallado — oculto en PDF */}
+            <div id="balance-detallado" style={S.card}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#a1a1aa", marginBottom: 16 }}>Balance detallado</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {[

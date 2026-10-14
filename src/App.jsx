@@ -38,7 +38,7 @@ const CON_VIAJES = [
   "Nissan Frontier 2022","Camion algodonero #1"
 ];
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxMLwUa1k9N5eFN6Qqcv6PEgla2pBJUr0GsfO2V2Pv1Sg2buQi0YEWE1hZ9rllfM6Xf/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxH2lZn2BBeQasU7VlbR3F0nVS_bErNO9PkTKS5vwGv0EQXbat0RcNCJU45ZWW_uuiu/exec";
 
 function tieneHorometro(u) { return CON_HOROMETRO.includes(u); }
 function tieneHectareas(u) { return CON_HECTAREAS.includes(u); }

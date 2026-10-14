@@ -81,6 +81,103 @@ function ViajesBadge({ lpv }) {
   );
 }
 
+const CULTIVOS_TRILLA = ["Trigo","Maíz","Garbanzo","Otro"];
+const CULTIVOS_PISCA  = ["Algodón","Otro"];
+const TRILLADORAS_LIST = ["Trilladora Lexion 560R","Trilladora JD 9779 STS"];
+const PISCADORAS_LIST  = ["Piscadora John Deere 1","Piscadora John Deere 2"];
+
+function MaquinaHaCard({ titulo, emoji, cultivos, unidades, storagePrefix, consumos }) {
+  const initHa = () => {
+    const obj = {};
+    cultivos.forEach(c => { try { obj[c] = localStorage.getItem(`${storagePrefix}_${c}`) || ""; } catch { obj[c] = ""; } });
+    return obj;
+  };
+  const [haMap, setHaMap] = useState(initHa);
+
+  const litrosTotales = consumos
+    .filter(c => unidades.includes(c.unidad))
+    .reduce((s, c) => s + Number(c.litros || 0), 0);
+
+  const totalHa = cultivos.reduce((s, c) => s + (Number(haMap[c]) || 0), 0);
+
+  function setHa(cultivo, val) {
+    setHaMap(p => ({ ...p, [cultivo]: val }));
+    try { localStorage.setItem(`${storagePrefix}_${cultivo}`, val); } catch {}
+  }
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b", marginBottom: 10 }}>{emoji} {titulo}</div>
+      <div style={{ background: "#18181b", borderRadius: 10, padding: "10px 14px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 11, color: "#71717a", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Diesel total</span>
+        <span style={{ fontSize: 16, fontWeight: 800, color: "#f59e0b" }}>{litrosTotales.toLocaleString()} L</span>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid #27272a" }}>
+            {["Cultivo","Has","Diesel prop.","L/ha"].map(h => (
+              <th key={h} style={{ textAlign: "left", padding: "0 10px 8px 0", fontSize: 11, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {cultivos.map(cultivo => {
+            const ha = Number(haMap[cultivo]) || 0;
+            const pct = totalHa > 0 && ha > 0 ? ha / totalHa : 0;
+            const litrosAsig = Math.round(litrosTotales * pct);
+            const lpha = ha > 0 ? (litrosAsig / ha).toFixed(1) : null;
+            return (
+              <tr key={cultivo} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
+                <td style={{ padding: "8px 10px 8px 0", fontWeight: 600 }}>{cultivo}</td>
+                <td style={{ padding: "8px 10px 8px 0" }}>
+                  <input type="number" style={{ background: "#27272a", border: "1px solid #3f3f46", borderRadius: 6, color: "#f4f4f5", padding: "4px 8px", fontSize: 12, width: 80 }}
+                    placeholder="0" value={haMap[cultivo]}
+                    onChange={e => setHa(cultivo, e.target.value)} />
+                </td>
+                <td style={{ padding: "8px 10px 8px 0", color: "#f59e0b" }}>{litrosAsig > 0 ? `${litrosAsig} L` : "—"}</td>
+                <td style={{ padding: "8px 0" }}>
+                  {lpha
+                    ? <span style={{ background: "#10b98120", color: "#34d399", border: "1px solid #10b98150", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{lpha} L/ha</span>
+                    : <span style={{ color: "#52525b", fontSize: 11 }}>—</span>}
+                </td>
+              </tr>
+            );
+          })}
+          {totalHa > 0 && (
+            <tr style={{ borderTop: "2px solid #27272a" }}>
+              <td style={{ padding: "8px 10px 8px 0", fontWeight: 800, color: "#a1a1aa" }}>TOTAL</td>
+              <td style={{ padding: "8px 10px 8px 0", fontWeight: 800 }}>{totalHa} ha</td>
+              <td style={{ padding: "8px 10px 8px 0", color: "#f59e0b", fontWeight: 800 }}>{litrosTotales} L</td>
+              <td style={{ padding: "8px 0" }}>
+                <span style={{ background: "#10b98120", color: "#34d399", border: "1px solid #10b98150", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+                  {(litrosTotales / totalHa).toFixed(1)} L/ha
+                </span>
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TrilladorasHaCard({ consumos }) {
+  return (
+    <div style={{ background: "#111113", border: "1px solid #27272a", borderRadius: 18, padding: "20px" }}>
+      <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🌾 Cosechadoras — Ha totales y L/ha</div>
+      <div style={{ fontSize: 12, color: "#52525b", marginBottom: 20 }}>
+        Ingresa las hectáreas totales por cultivo. El diesel suma ambas unidades de cada máquina.
+      </div>
+      <MaquinaHaCard titulo="Trilladoras" emoji="🌾" cultivos={CULTIVOS_TRILLA} unidades={TRILLADORAS_LIST} storagePrefix="trilla_ha" consumos={consumos} />
+      <div style={{ borderTop: "1px solid #27272a", marginBottom: 20 }} />
+      <MaquinaHaCard titulo="Piscadoras" emoji="🌿" cultivos={CULTIVOS_PISCA} unidades={PISCADORAS_LIST} storagePrefix="pisca_ha" consumos={consumos} />
+      <div style={{ fontSize: 11, color: "#3f3f46", marginTop: 8 }}>
+        * El diesel por cultivo se distribuye proporcionalmente a las Has ingresadas. Los valores se guardan en este dispositivo.
+      </div>
+    </div>
+  );
+}
+
 function WorkBadge({ trabajo }) {
   if (!trabajo) return <span style={{ color: "#52525b", fontSize: 11 }}>—</span>;
   return (
@@ -888,6 +985,9 @@ export default function DieselControl() {
                   })()
               }
             </div>
+
+            {/* Trilladoras: Ha totales + L/ha */}
+            <TrilladorasHaCard consumos={consumos} />
 
             {/* Camiones: L/viaje */}
             <div style={S.card}>

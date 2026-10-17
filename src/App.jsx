@@ -254,49 +254,75 @@ const TRACTORES_ACTIVOS = [
   "Tractor #5","Tractor #6","Tractor #7"
 ];
 
+// Normaliza cualquier fecha a string "YYYY-MM-DD" sin problemas de zona horaria
+function toDateStr(d) {
+  if (!d) return "";
+  if (typeof d === "number") {
+    // Número de serie de Excel/Sheets
+    const dt = new Date((d - 25569) * 86400 * 1000);
+    return dt.toISOString().slice(0, 10);
+  }
+  if (typeof d === "string") return d.slice(0, 10);
+  return new Date(d).toISOString().slice(0, 10);
+}
+
 function CiclosCargaCard({ consumos, entradas }) {
   const [cicloAbierto, setCicloAbierto] = useState(null);
 
-  // Ordenar entradas por fecha
-  const entradasOrdenadas = [...entradas].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-
-  // Construir ciclos: cada entrada abre un ciclo que cierra con la siguiente entrada
-  const ciclos = entradasOrdenadas.map((entrada, idx) => {
-    const fechaInicio = new Date(typeof entrada.fecha === "string" ? entrada.fecha + "T00:00:00" : entrada.fecha);
-    const fechaFin = entradasOrdenadas[idx + 1]
-      ? new Date(typeof entradasOrdenadas[idx + 1].fecha === "string" ? entradasOrdenadas[idx + 1].fecha + "T00:00:00" : entradasOrdenadas[idx + 1].fecha)
-      : null;
-
-    // Consumos de este ciclo
-    const consumosCiclo = consumos.filter(c => {
-      const fc = new Date(typeof c.fecha === "string" ? c.fecha + "T00:00:00" : c.fecha);
-      return fc >= fechaInicio && (fechaFin === null || fc < fechaFin);
+  // Agrupar entradas por día (mismo día = misma carga, ej: 2 × 2000 L = 4000 L)
+  const gruposPorDia = useMemo(() => {
+    const mapa = {};
+    entradas.forEach(e => {
+      const dia = toDateStr(e.fecha);
+      if (!mapa[dia]) mapa[dia] = { dia, litros: 0, entradas: [] };
+      mapa[dia].litros += Number(e.litros || 0);
+      mapa[dia].entradas.push(e);
     });
+    // Ordenar por fecha ascendente
+    return Object.values(mapa).sort((a, b) => a.dia.localeCompare(b.dia));
+  }, [entradas]);
 
-    const totalConsumo = consumosCiclo.reduce((s, c) => s + Number(c.litros || 0), 0);
-    const saldoCiclo = Number(entrada.litros) - totalConsumo;
+  // Para cada grupo, los consumos van desde ese día hasta antes del siguiente grupo
+  const ciclos = useMemo(() => {
+    return gruposPorDia.map((grupo, idx) => {
+      const diaInicio = grupo.dia;
+      const diaFin = gruposPorDia[idx + 1] ? gruposPorDia[idx + 1].dia : null;
 
-    // Días únicos con consumo en este ciclo
-    const diasConConsumo = {};
-    consumosCiclo.forEach(c => {
-      const d = typeof c.fecha === "string" ? c.fecha.slice(0, 10) : new Date(c.fecha).toISOString().slice(0, 10);
-      if (!diasConConsumo[d]) diasConConsumo[d] = new Set();
-      if (TRACTORES_ACTIVOS.includes(c.unidad)) diasConConsumo[d].add(c.unidad);
+      const consumosCiclo = consumos.filter(c => {
+        const dc = toDateStr(c.fecha);
+        return dc >= diaInicio && (diaFin === null || dc < diaFin);
+      });
+
+      const totalConsumo = consumosCiclo.reduce((s, c) => s + Number(c.litros || 0), 0);
+      const saldo = grupo.litros - totalConsumo;
+
+      // Mapa dia → set de tractores con consumo
+      const diasConConsumo = {};
+      consumosCiclo.forEach(c => {
+        const dc = toDateStr(c.fecha);
+        if (!diasConConsumo[dc]) diasConConsumo[dc] = new Set();
+        if (TRACTORES_ACTIVOS.includes(c.unidad)) diasConConsumo[dc].add(c.unidad);
+      });
+
+      // Lista de días desde diaInicio hasta hoy (o día antes de diaFin)
+      const hoyStr = toDateStr(new Date());
+      const limStr = diaFin
+        ? (diaFin < hoyStr ? (() => { const d = new Date(diaFin + "T12:00:00"); d.setDate(d.getDate()-1); return toDateStr(d); })() : hoyStr)
+        : hoyStr;
+      const dias = [];
+      const cur = new Date(diaInicio + "T12:00:00");
+      const lim = new Date(limStr + "T12:00:00");
+      while (cur <= lim) {
+        dias.push(toDateStr(cur));
+        cur.setDate(cur.getDate() + 1);
+      }
+
+      // Proveedores del grupo
+      const proveedores = [...new Set(grupo.entradas.map(e => e.proveedor).filter(Boolean))].join(", ");
+
+      return { grupo, consumosCiclo, totalConsumo, saldo, diasConConsumo, dias, esActual: diaFin === null, proveedores };
     });
-
-    // Lista de días del ciclo (desde día de entrada hasta hoy o próxima entrada)
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    const limFin = fechaFin ? new Date(Math.min(fechaFin - 86400000, hoy)) : hoy;
-    const dias = [];
-    const cur = new Date(fechaInicio);
-    while (cur <= limFin) {
-      dias.push(cur.toISOString().slice(0, 10));
-      cur.setDate(cur.getDate() + 1);
-    }
-
-    return { entrada, consumosCiclo, totalConsumo, saldoCiclo, diasConConsumo, dias, esActual: fechaFin === null };
-  });
+  }, [gruposPorDia, consumos]);
 
   if (ciclos.length === 0) {
     return (
@@ -313,18 +339,18 @@ function CiclosCargaCard({ consumos, entradas }) {
     <div style={{ background: "#111113", border: "1px solid #27272a", borderRadius: 18, padding: "20px" }}>
       <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>⛽ Ciclos por carga</div>
       <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>
-        Consumos y auditoría de tractores por cada carga de diésel. ✓ = registró ese día · <span style={{ color: "#ef444480" }}>✕</span> = sin registro.
+        Entradas del mismo día se suman como una sola carga. ✓ = tractor registró ese día · <span style={{ color: "#ef4444" }}>✕</span> = sin registro.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {[...ciclos].reverse().map((ciclo, idx) => {
-          const cid = ciclo.entrada.id;
+          const cid = ciclo.grupo.dia;
           const abierto = cicloAbierto === cid;
           const numCiclo = ciclos.length - idx;
 
           return (
             <div key={cid} style={{ border: "1px solid #27272a", borderRadius: 12, overflow: "hidden" }}>
-              {/* Encabezado del ciclo — siempre visible */}
+              {/* Encabezado */}
               <div
                 onClick={() => setCicloAbierto(abierto ? null : cid)}
                 style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", cursor: "pointer", background: abierto ? "#1a1a0a" : "#18181b" }}
@@ -335,10 +361,15 @@ function CiclosCargaCard({ consumos, entradas }) {
                   </div>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700 }}>
-                      {ciclo.entrada.proveedor || "Carga"} — {Number(ciclo.entrada.litros).toLocaleString()} L
+                      {ciclo.proveedores || "Carga"} — {ciclo.grupo.litros.toLocaleString()} L
+                      {ciclo.grupo.entradas.length > 1 && (
+                        <span style={{ marginLeft: 6, fontSize: 10, color: "#71717a" }}>({ciclo.grupo.entradas.length} entradas)</span>
+                      )}
                       {ciclo.esActual && <span style={{ marginLeft: 8, fontSize: 10, background: "#10b98120", color: "#34d399", border: "1px solid #10b98140", borderRadius: 4, padding: "1px 6px", fontWeight: 700 }}>ACTUAL</span>}
                     </div>
-                    <div style={{ fontSize: 11, color: "#71717a", marginTop: 2 }}>{formatDate(ciclo.entrada.fecha)} · {ciclo.consumosCiclo.length} registros</div>
+                    <div style={{ fontSize: 11, color: "#71717a", marginTop: 2 }}>
+                      {formatDate(ciclo.grupo.dia)} · {ciclo.consumosCiclo.length} consumos
+                    </div>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
@@ -348,11 +379,11 @@ function CiclosCargaCard({ consumos, entradas }) {
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 11, color: "#52525b" }}>Saldo</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: ciclo.saldoCiclo >= 0 ? "#10b981" : "#ef4444" }}>
-                      {ciclo.saldoCiclo >= 0 ? "+" : ""}{ciclo.saldoCiclo.toLocaleString()} L
+                    <div style={{ fontSize: 14, fontWeight: 700, color: ciclo.saldo >= 0 ? "#10b981" : "#ef4444" }}>
+                      {ciclo.saldo >= 0 ? "+" : ""}{ciclo.saldo.toLocaleString()} L
                     </div>
                   </div>
-                  <div style={{ fontSize: 16, color: "#52525b", transition: "transform 0.2s", transform: abierto ? "rotate(180deg)" : "none" }}>▾</div>
+                  <div style={{ fontSize: 16, color: "#52525b", transform: abierto ? "rotate(180deg)" : "none" }}>▾</div>
                 </div>
               </div>
 
@@ -360,7 +391,7 @@ function CiclosCargaCard({ consumos, entradas }) {
               {abierto && (
                 <div style={{ padding: "16px", borderTop: "1px solid #27272a", background: "#09090b" }}>
 
-                  {/* Tabla de auditoría por día */}
+                  {/* Auditoría diaria */}
                   <div style={{ fontSize: 12, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
                     Auditoría diaria de tractores
                   </div>
@@ -381,14 +412,11 @@ function CiclosCargaCard({ consumos, entradas }) {
                         {ciclo.dias.map(dia => {
                           const tractoresDelDia = ciclo.diasConConsumo[dia] || new Set();
                           const litrosDia = ciclo.consumosCiclo
-                            .filter(c => {
-                              const fd = typeof c.fecha === "string" ? c.fecha.slice(0, 10) : new Date(c.fecha).toISOString().slice(0, 10);
-                              return fd === dia;
-                            })
+                            .filter(c => toDateStr(c.fecha) === dia)
                             .reduce((s, c) => s + Number(c.litros || 0), 0);
                           const tieneDatos = litrosDia > 0;
                           return (
-                            <tr key={dia} style={{ borderBottom: "1px solid #1f1f22", opacity: tieneDatos ? 1 : 0.4 }}>
+                            <tr key={dia} style={{ borderBottom: "1px solid #1f1f22", opacity: tieneDatos ? 1 : 0.45 }}>
                               <td style={{ padding: "7px 12px 7px 0", color: "#a1a1aa", whiteSpace: "nowrap", fontSize: 11 }}>
                                 {new Date(dia + "T12:00:00").toLocaleDateString("es-MX", { weekday: "short", day: "2-digit", month: "short" })}
                               </td>
@@ -397,7 +425,7 @@ function CiclosCargaCard({ consumos, entradas }) {
                                   {tractoresDelDia.has(t)
                                     ? <span style={{ color: "#10b981", fontSize: 14 }}>✓</span>
                                     : tieneDatos
-                                      ? <span style={{ color: "#ef444460", fontSize: 12 }}>✕</span>
+                                      ? <span style={{ color: "#ef4444", fontSize: 12, opacity: 0.5 }}>✕</span>
                                       : <span style={{ color: "#3f3f46", fontSize: 11 }}>—</span>
                                   }
                                 </td>
@@ -412,7 +440,7 @@ function CiclosCargaCard({ consumos, entradas }) {
                     </table>
                   </div>
 
-                  {/* Resumen por unidad */}
+                  {/* Consumo por unidad */}
                   <div style={{ fontSize: 12, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
                     Consumo por unidad en este ciclo
                   </div>

@@ -17,7 +17,8 @@ const UNIDADES = [
   "Torton Dina Rojo","Torton Intl Blanco",
   "Piscadora John Deere 1","Piscadora John Deere 2",
   "Nissan Frontier 2022",
-  "Camion algodonero #1"
+  "Camion algodonero #1",
+  "Otros"
 ];
 
 const CON_HOROMETRO = [
@@ -638,7 +639,7 @@ export default function DieselControl() {
 
   async function addConsumo() {
     if (!fc.fecha || !fc.unidad || !fc.litros) { showMsg("Completa fecha, unidad y litros.", "warn"); return; }
-    if (!tieneViajes(fc.unidad) && horasCalculadas === null) { showMsg("Ingresa horómetro, horas o marca N/A.", "warn"); return; }
+    if (fc.unidad !== "Otros" && !tieneViajes(fc.unidad) && horasCalculadas === null) { showMsg("Ingresa horómetro, horas o marca N/A.", "warn"); return; }
     const nuevo = {
       id: Date.now(), fecha: fc.fecha, unidad: fc.unidad,
       litros: Number(fc.litros),
@@ -963,19 +964,30 @@ export default function DieselControl() {
                     <optgroup label="── Camiones ──">
                       {UNIDADES.filter(u => u.startsWith("Camion")).map(u => <option key={u}>{u}</option>)}
                     </optgroup>
+                    <optgroup label="── Otros ──">
+                      <option>Otros</option>
+                    </optgroup>
                   </select>
                 </div>
                 <div>
                   <label style={S.label}>Litros consumidos *</label>
                   <input type="number" min="0" step="0.1" style={S.input} placeholder="0.0" value={fc.litros} onChange={e => setFc(p => ({ ...p, litros: e.target.value }))} />
                 </div>
-                <div>
-                  <label style={S.label}>Trabajo realizado</label>
-                  <select style={S.input} value={fc.trabajo} onChange={e => setFc(p => ({ ...p, trabajo: e.target.value }))}>
-                    <option value="">Sin especificar</option>
-                    {TRABAJOS.map(t => <option key={t}>{t}</option>)}
-                  </select>
-                </div>
+                {fc.unidad !== "Otros" && (
+                  <div>
+                    <label style={S.label}>Trabajo realizado</label>
+                    <select style={S.input} value={fc.trabajo} onChange={e => setFc(p => ({ ...p, trabajo: e.target.value }))}>
+                      <option value="">Sin especificar</option>
+                      {TRABAJOS.map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                )}
+                {fc.unidad === "Otros" && (
+                  <div>
+                    <label style={S.label}>Concepto *</label>
+                    <input style={S.input} placeholder="Ej. Bomba de agua, generador, motosierra..." value={fc.notas} onChange={e => setFc(p => ({ ...p, notas: e.target.value }))} />
+                  </div>
+                )}
 
                 {fc.unidad && tieneViajes(fc.unidad) && (
                   <div>
@@ -986,7 +998,7 @@ export default function DieselControl() {
                 )}
               </div>
 
-              {fc.unidad && !tieneViajes(fc.unidad) && (
+              {fc.unidad && fc.unidad !== "Otros" && !tieneViajes(fc.unidad) && (
                 <div style={{ marginTop: 16, background: "#09090b", borderRadius: 12, padding: 16, border: "1px solid #27272a" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em" }}>Horas de trabajo</span>

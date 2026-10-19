@@ -6,7 +6,7 @@ const TRABAJOS = [
   "Trilla trigo", "Trilla Maiz", "Trilla Garbanzo",
   "Tumba de bordos con arado", "Tumba de bordos con canalera",
   "Movimiento y compactacion modulador", "Traslado de modulos",
-  "Desvare", "Desenraizadora", "Varios"
+  "Desvare", "Desenraizadora", "Aplicacion con aspersora", "Varios"
 ];
 
 const UNIDADES = [

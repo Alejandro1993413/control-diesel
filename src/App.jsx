@@ -289,11 +289,9 @@ function CiclosCargaCard({ consumos, entradas }) {
       const diaInicio = grupo.dia;
       const diaFin = gruposPorDia[idx + 1] ? gruposPorDia[idx + 1].dia : null;
 
-      // Los consumos de este ciclo comienzan el día SIGUIENTE a la entrada
-      const diaSiguiente = (() => { const d = new Date(diaInicio + "T12:00:00"); d.setDate(d.getDate() + 1); return toDateStr(d); })();
       const consumosCiclo = consumos.filter(c => {
         const dc = toDateStr(c.fecha);
-        return dc >= diaSiguiente && (diaFin === null || dc < diaFin);
+        return dc >= diaInicio && (diaFin === null || dc < diaFin);
       });
 
       const totalConsumo = consumosCiclo.reduce((s, c) => s + Number(c.litros || 0), 0);
@@ -313,7 +311,7 @@ function CiclosCargaCard({ consumos, entradas }) {
         ? (diaFin < hoyStr ? (() => { const d = new Date(diaFin + "T12:00:00"); d.setDate(d.getDate()-1); return toDateStr(d); })() : hoyStr)
         : hoyStr;
       const dias = [];
-      const cur = new Date(diaSiguiente + "T12:00:00");
+      const cur = new Date(diaInicio + "T12:00:00");
       const lim = new Date(limStr + "T12:00:00");
       while (cur <= lim) {
         dias.push(toDateStr(cur));

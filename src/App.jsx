@@ -289,9 +289,17 @@ function CiclosCargaCard({ consumos, entradas }) {
       const diaInicio = grupo.dia;
       const diaFin = gruposPorDia[idx + 1] ? gruposPorDia[idx + 1].dia : null;
 
+      // Los consumos de este ciclo: primero los asignados manualmente (cicloId),
+      // luego los que caen por fecha (día siguiente al de la entrada hasta antes de la próxima carga)
+      const diaSiguiente = (() => { const d = new Date(diaInicio + "T12:00:00"); d.setDate(d.getDate() + 1); return toDateStr(d); })();
+      // IDs de todas las entradas de este grupo (pueden ser varias del mismo día)
+      const idsGrupo = new Set(grupo.entradas.map(e => String(e.id)));
       const consumosCiclo = consumos.filter(c => {
+        // Asignación manual explícita
+        if (c.cicloId) return idsGrupo.has(String(c.cicloId));
+        // Fallback automático por fecha
         const dc = toDateStr(c.fecha);
-        return dc >= diaInicio && (diaFin === null || dc < diaFin);
+        return dc >= diaSiguiente && (diaFin === null || dc < diaFin);
       });
 
       const totalConsumo = consumosCiclo.reduce((s, c) => s + Number(c.litros || 0), 0);
@@ -311,7 +319,7 @@ function CiclosCargaCard({ consumos, entradas }) {
         ? (diaFin < hoyStr ? (() => { const d = new Date(diaFin + "T12:00:00"); d.setDate(d.getDate()-1); return toDateStr(d); })() : hoyStr)
         : hoyStr;
       const dias = [];
-      const cur = new Date(diaInicio + "T12:00:00");
+      const cur = new Date(diaSiguiente + "T12:00:00");
       const lim = new Date(limStr + "T12:00:00");
       while (cur <= lim) {
         dias.push(toDateStr(cur));
@@ -505,7 +513,7 @@ export default function DieselControl() {
     fecha: "", unidad: "", litros: "", trabajo: "", notas: "",
     modoHoras: "horometro", horometroActual: "", horometroAnterior: "",
     horasDirectas: "", naHoras: false, kilometraje: "", hectareas: "",
-    viajes: ""
+    viajes: "", cicloId: ""
   };
   const [fc, setFc] = useState(initialFc);
   const [fe, setFe] = useState({ fecha: "", litros: "", proveedor: "", factura: "", notas: "" });
@@ -646,7 +654,7 @@ export default function DieselControl() {
       horas: fc.naHoras ? "N/A" : (horasCalculadas ?? "N/A"),
       trabajo: fc.trabajo || "", notas: fc.notas,
       kilometraje: fc.kilometraje || "", hectareas: fc.hectareas || "",
-      viajes: fc.viajes || "",
+      viajes: fc.viajes || "", cicloId: fc.cicloId || "",
       modoHoras: fc.modoHoras,
       horometroActual:   fc.modoHoras === "horometro" ? Number(fc.horometroActual)   : "",
       horometroAnterior: fc.modoHoras === "horometro" ? Number(fc.horometroAnterior) : "",
@@ -972,6 +980,17 @@ export default function DieselControl() {
                 <div>
                   <label style={S.label}>Litros consumidos *</label>
                   <input type="number" min="0" step="0.1" style={S.input} placeholder="0.0" value={fc.litros} onChange={e => setFc(p => ({ ...p, litros: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={S.label}>Carga de diésel <span style={{ color: "#3f3f46", textTransform: "none", fontWeight: 400 }}>(opcional)</span></label>
+                  <select style={S.input} value={fc.cicloId} onChange={e => setFc(p => ({ ...p, cicloId: e.target.value }))}>
+                    <option value="">Asignar automáticamente por fecha</option>
+                    {[...entradas].sort((a, b) => toDateStr(b.fecha).localeCompare(toDateStr(a.fecha))).map(e => (
+                      <option key={e.id} value={String(e.id)}>
+                        {formatDate(e.fecha)} — {Number(e.litros).toLocaleString()} L{e.proveedor ? ` · ${e.proveedor}` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 {fc.unidad !== "Otros" && (
                   <div>

@@ -695,7 +695,8 @@ export default function DieselControl() {
       trabajo: c.trabajo || "", notas: c.notas || "", hectareas: c.hectareas || "",
       viajes: c.viajes || "", kilometraje: c.kilometraje || "",
       horometroAnterior: c.horometroAnterior || "", horometroActual: c.horometroActual || "",
-      horasDirectas: c.modoHoras === "directas" ? (c.horas || "") : ""
+      horasDirectas: c.modoHoras === "directas" ? (c.horas || "") : "",
+      cicloId: c.cicloId || ""
     });
   }
   function cancelEdit() { setEditingId(null); setEditData({}); }
@@ -1144,6 +1145,14 @@ export default function DieselControl() {
                             <td style={{ padding: "10px 10px 10px 0", minWidth: 150 }}>
                               {isEditing
                                 ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                    <select style={S.inputSm} value={editData.cicloId ?? (c.cicloId || "")} onChange={e => setEditData(p => ({ ...p, cicloId: e.target.value }))}>
+                                      <option value="">Auto por fecha</option>
+                                      {[...entradas].sort((a, b) => toDateStr(b.fecha).localeCompare(toDateStr(a.fecha))).map(e => (
+                                        <option key={e.id} value={String(e.id)}>
+                                          {formatDate(e.fecha)} — {Number(e.litros).toLocaleString()} L{e.proveedor ? ` · ${e.proveedor}` : ""}
+                                        </option>
+                                      ))}
+                                    </select>
                                     <input style={S.inputSm} placeholder="Notas..." value={editData.notas} onChange={e => setEditData(p => ({ ...p, notas: e.target.value }))} />
                                     {tieneHorometro(c.unidad) && (<>
                                       <select style={S.inputSm} value={editData.modoHorasEdit || c.modoHoras} onChange={e => setEditData(p => ({ ...p, modoHorasEdit: e.target.value }))}>

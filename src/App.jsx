@@ -292,11 +292,9 @@ function CiclosCargaCard({ consumos, entradas }) {
       // Los consumos de este ciclo: primero los asignados manualmente (cicloId),
       // luego los que caen por fecha (día siguiente al de la entrada hasta antes de la próxima carga)
       const diaSiguiente = (() => { const d = new Date(diaInicio + "T12:00:00"); d.setDate(d.getDate() + 1); return toDateStr(d); })();
-      // IDs de todas las entradas de este grupo (pueden ser varias del mismo día)
-      const idsGrupo = new Set(grupo.entradas.map(e => String(e.id)));
       const consumosCiclo = consumos.filter(c => {
-        // Asignación manual explícita
-        if (c.cicloId) return idsGrupo.has(String(c.cicloId));
+        // Asignación manual explícita: cicloId es la fecha del día de carga
+        if (c.cicloId) return c.cicloId === diaInicio;
         // Fallback automático por fecha
         const dc = toDateStr(c.fecha);
         return dc >= diaSiguiente && (diaFin === null || dc < diaFin);
@@ -986,9 +984,14 @@ export default function DieselControl() {
                   <label style={S.label}>Carga de diésel <span style={{ color: "#3f3f46", textTransform: "none", fontWeight: 400 }}>(opcional)</span></label>
                   <select style={S.input} value={fc.cicloId} onChange={e => setFc(p => ({ ...p, cicloId: e.target.value }))}>
                     <option value="">Asignar automáticamente por fecha</option>
-                    {[...entradas].sort((a, b) => toDateStr(b.fecha).localeCompare(toDateStr(a.fecha))).map(e => (
-                      <option key={e.id} value={String(e.id)}>
-                        {formatDate(e.fecha)} — {Number(e.litros).toLocaleString()} L{e.proveedor ? ` · ${e.proveedor}` : ""}
+                    {Object.values(entradas.reduce((acc, e) => {
+                      const d = toDateStr(e.fecha);
+                      if (!acc[d]) acc[d] = { dia: d, litros: 0 };
+                      acc[d].litros += Number(e.litros || 0);
+                      return acc;
+                    }, {})).sort((a, b) => b.dia.localeCompare(a.dia)).map(g => (
+                      <option key={g.dia} value={g.dia}>
+                        {formatDate(g.dia)} — {g.litros.toLocaleString()} L
                       </option>
                     ))}
                   </select>
@@ -1147,9 +1150,14 @@ export default function DieselControl() {
                                 ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                                     <select style={S.inputSm} value={editData.cicloId ?? (c.cicloId || "")} onChange={e => setEditData(p => ({ ...p, cicloId: e.target.value }))}>
                                       <option value="">Auto por fecha</option>
-                                      {[...entradas].sort((a, b) => toDateStr(b.fecha).localeCompare(toDateStr(a.fecha))).map(e => (
-                                        <option key={e.id} value={String(e.id)}>
-                                          {formatDate(e.fecha)} — {Number(e.litros).toLocaleString()} L{e.proveedor ? ` · ${e.proveedor}` : ""}
+                                      {Object.values(entradas.reduce((acc, e) => {
+                                        const d = toDateStr(e.fecha);
+                                        if (!acc[d]) acc[d] = { dia: d, litros: 0 };
+                                        acc[d].litros += Number(e.litros || 0);
+                                        return acc;
+                                      }, {})).sort((a, b) => b.dia.localeCompare(a.dia)).map(g => (
+                                        <option key={g.dia} value={g.dia}>
+                                          {formatDate(g.dia)} — {g.litros.toLocaleString()} L
                                         </option>
                                       ))}
                                     </select>

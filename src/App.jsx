@@ -352,7 +352,7 @@ function CiclosCargaCard({ consumos, entradas, soloActual = false }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {(soloActual ? [ciclos[ciclos.length - 1]].filter(Boolean) : [...ciclos].reverse()).map((ciclo, idx) => {
           const cid = ciclo.grupo.dia;
-          const abierto = cicloAbierto === cid;
+          const abierto = soloActual || cicloAbierto === cid;
           const numCiclo = ciclos.length - idx;
 
           return (

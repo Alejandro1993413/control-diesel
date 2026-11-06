@@ -267,13 +267,13 @@ function toDateStr(d) {
   return new Date(d).toISOString().slice(0, 10);
 }
 
-function CiclosCargaCard({ consumos, entradas }) {
+function CiclosCargaCard({ consumos, entradas, soloActual = false }) {
   const [cicloAbierto, setCicloAbierto] = useState(null);
 
-  // Agrupar entradas por día (mismo día = misma carga, ej: 2 × 2000 L = 4000 L)
+  // Agrupar entradas por día — excluir ajustes de saldo
   const gruposPorDia = useMemo(() => {
     const mapa = {};
-    entradas.forEach(e => {
+    entradas.filter(e => !e.esAjuste).forEach(e => {
       const dia = toDateStr(e.fecha);
       if (!mapa[dia]) mapa[dia] = { dia, litros: 0, entradas: [] };
       mapa[dia].litros += Number(e.litros || 0);
@@ -350,7 +350,7 @@ function CiclosCargaCard({ consumos, entradas }) {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {[...ciclos].reverse().map((ciclo, idx) => {
+        {(soloActual ? [ciclos[ciclos.length - 1]].filter(Boolean) : [...ciclos].reverse()).map((ciclo, idx) => {
           const cid = ciclo.grupo.dia;
           const abierto = cicloAbierto === cid;
           const numCiclo = ciclos.length - idx;
@@ -514,7 +514,8 @@ export default function DieselControl() {
     viajes: "", cicloId: ""
   };
   const [fc, setFc] = useState(initialFc);
-  const [fe, setFe] = useState({ fecha: "", litros: "", proveedor: "", factura: "", notas: "" });
+  const [fe, setFe] = useState({ fecha: "", litros: "", proveedor: "", factura: "", notas: "", esAjuste: false });
+  const [pdfMenu, setPdfMenu] = useState(false);
 
   function showMsg(text, type = "ok") {
     setMsg({ text, type });
@@ -667,9 +668,9 @@ export default function DieselControl() {
 
   async function addEntrada() {
     if (!fe.fecha || !fe.litros) { showMsg("Fecha y litros son requeridos.", "warn"); return; }
-    const nuevo = { id: Date.now(), fecha: fe.fecha, litros: Number(fe.litros), proveedor: fe.proveedor, factura: fe.factura, notas: fe.notas };
+    const nuevo = { id: Date.now(), fecha: fe.fecha, litros: Number(fe.litros), proveedor: fe.proveedor, factura: fe.factura, notas: fe.notas, esAjuste: fe.esAjuste || false };
     setEntradas(prev => [...prev, nuevo]);
-    setFe({ fecha: "", litros: "", proveedor: "", factura: "", notas: "" });
+    setFe({ fecha: "", litros: "", proveedor: "", factura: "", notas: "", esAjuste: false });
     showMsg("Entrada registrada correctamente.");
     setSyncing(true);
     await api("addEntrada", nuevo);
@@ -1241,6 +1242,16 @@ export default function DieselControl() {
                   <label style={S.label}>Notas</label>
                   <textarea style={{ ...S.input, resize: "none" }} rows={2} placeholder="Observaciones..." value={fe.notas} onChange={e => setFe(p => ({ ...p, notas: e.target.value }))} />
                 </div>
+                <div style={{ gridColumn: "span 2" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none" }}>
+                    <input type="checkbox" checked={fe.esAjuste} onChange={e => setFe(p => ({ ...p, esAjuste: e.target.checked }))}
+                      style={{ width: 16, height: 16, accentColor: "#f59e0b", cursor: "pointer" }} />
+                    <div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#f59e0b" }}>Ajuste de saldo</span>
+                      <span style={{ fontSize: 11, color: "#52525b", marginLeft: 8 }}>No se contará como carga en los ciclos de diésel</span>
+                    </div>
+                  </label>
+                </div>
               </div>
               <button onClick={addEntrada} style={{ ...S.btn("green"), marginTop: 18 }}>Registrar entrada</button>
             </div>
@@ -1262,7 +1273,10 @@ export default function DieselControl() {
                       {[...entradas].reverse().map(e => (
                         <tr key={e.id} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
                           <td style={{ padding: "10px 12px 10px 0", color: "#71717a", whiteSpace: "nowrap" }}>{formatDate(e.fecha)}</td>
-                          <td style={{ padding: "10px 12px 10px 0", color: "#10b981", fontWeight: 700 }}>+{e.litros} L</td>
+                          <td style={{ padding: "10px 12px 10px 0", color: "#10b981", fontWeight: 700 }}>
+                            +{e.litros} L
+                            {e.esAjuste && <span style={{ marginLeft: 6, fontSize: 10, background: "#f59e0b20", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: 4, padding: "1px 5px", fontWeight: 700 }}>AJUSTE</span>}
+                          </td>
                           <td style={{ padding: "10px 12px 10px 0", fontWeight: 500 }}>{e.proveedor || "—"}</td>
                           <td style={{ padding: "10px 12px 10px 0", color: "#71717a" }}>{e.factura || "—"}</td>
                           <td style={{ padding: "10px 12px 10px 0", color: "#52525b" }}>{e.notas || "—"}</td>
@@ -1287,11 +1301,21 @@ export default function DieselControl() {
               <div style={{ fontSize: 20, fontWeight: 800 }}>GRUPO CEBALLOS — CONTROL DE DIESEL</div>
               <div style={{ fontSize: 12, color: "#444", marginTop: 4 }}>Reporte generado el {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</div>
             </div>
-            {/* Botón exportar PDF */}
-            <div style={{ display: "flex", justifyContent: "flex-end" }} data-noprint>
-              <button onClick={() => window.print()} style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #1d4ed840", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-                📄 Exportar PDF
-              </button>
+            {/* Botones exportar PDF */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }} data-noprint>
+              {[
+                { label: "📄 Rendimiento", tipo: "rendimiento", title: "Tractores, trilladoras y camiones" },
+                { label: "⛽ Ciclo actual", tipo: "ciclo-actual", title: "Solo el ciclo de diésel en curso" },
+                { label: "⛽ Todos los ciclos", tipo: "ciclos", title: "Todos los ciclos de carga" },
+              ].map(({ label, tipo, title }) => (
+                <button key={tipo} title={title} onClick={() => {
+                  document.body.setAttribute("data-print", tipo);
+                  window.print();
+                  setTimeout(() => document.body.removeAttribute("data-print"), 500);
+                }} style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #1d4ed840", borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  {label}
+                </button>
+              ))}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               {[
@@ -1307,7 +1331,7 @@ export default function DieselControl() {
             </div>
 
             {/* Tractores: L/hr por trabajo */}
-            <div style={S.card}>
+            <div id="seccion-rendimiento" style={S.card}>
               <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚜 Tractores y Trilladoras — L/hr por trabajo</div>
               <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>Rendimiento de cada unidad desglosado por tipo de trabajo.</div>
               {rendTractoresPorTrabajo.length === 0
@@ -1347,13 +1371,15 @@ export default function DieselControl() {
             </div>
 
             {/* Trilladoras: Ha totales + L/ha */}
-            <TrilladorasHaCard consumos={consumos} />
+            <div id="seccion-trilladoras"><TrilladorasHaCard consumos={consumos} /></div>
 
             {/* Camiones: L/viaje */}
-            <CamionesViajeCard consumos={consumos} />
+            <div id="seccion-camiones"><CamionesViajeCard consumos={consumos} /></div>
 
-            {/* Ciclos de Carga */}
-            <CiclosCargaCard consumos={consumos} entradas={entradas} />
+            {/* Ciclos de Carga — todos */}
+            <div id="seccion-ciclos"><CiclosCargaCard consumos={consumos} entradas={entradas} soloActual={false} /></div>
+            {/* Ciclo actual — solo para PDF de ciclo actual */}
+            <div id="seccion-ciclo-actual" style={{ display: "none" }}><CiclosCargaCard consumos={consumos} entradas={entradas} soloActual={true} /></div>
 
             {/* Balance detallado — oculto en PDF */}
             <div id="balance-detallado" style={S.card}>

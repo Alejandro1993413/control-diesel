@@ -1304,7 +1304,8 @@ export default function DieselControl() {
             {/* Botones exportar PDF */}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }} data-noprint>
               {[
-                { label: "📄 Rendimiento", tipo: "rendimiento", title: "Tractores, trilladoras y camiones" },
+                { label: "🚜 Tractores", tipo: "tractores", title: "Solo rendimiento de tractores por trabajo" },
+                { label: "🌾 Trilladoras y Camiones", tipo: "trilladoras", title: "Trilladoras y camiones" },
                 { label: "⛽ Ciclo actual", tipo: "ciclo-actual", title: "Solo el ciclo de diésel en curso" },
                 { label: "⛽ Todos los ciclos", tipo: "ciclos", title: "Todos los ciclos de carga" },
               ].map(({ label, tipo, title }) => (
@@ -1331,9 +1332,9 @@ export default function DieselControl() {
             </div>
 
             {/* Tractores: L/hr por trabajo */}
-            <div id="seccion-rendimiento" style={S.card}>
-              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚜 Tractores y Trilladoras — L/hr por trabajo</div>
-              <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>Rendimiento de cada unidad desglosado por tipo de trabajo.</div>
+            <div id="seccion-tractores" style={S.card}>
+              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚜 Tractores — L/hr por trabajo</div>
+              <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>Rendimiento de cada tractor desglosado por tipo de trabajo.</div>
               {rendTractoresPorTrabajo.length === 0
                 ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin datos suficientes. Registra consumos con horómetro.</div>
                 : (() => {
@@ -1370,11 +1371,11 @@ export default function DieselControl() {
               }
             </div>
 
-            {/* Trilladoras: Ha totales + L/ha */}
-            <div id="seccion-trilladoras"><TrilladorasHaCard consumos={consumos} /></div>
-
-            {/* Camiones: L/viaje */}
-            <div id="seccion-camiones"><CamionesViajeCard consumos={consumos} /></div>
+            {/* Trilladoras y Camiones */}
+            <div id="seccion-trilladoras-camiones">
+              <TrilladorasHaCard consumos={consumos} />
+              <CamionesViajeCard consumos={consumos} />
+            </div>
 
             {/* Ciclos de Carga — todos */}
             <div id="seccion-ciclos"><CiclosCargaCard consumos={consumos} entradas={entradas} soloActual={false} /></div>

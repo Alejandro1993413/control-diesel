@@ -556,7 +556,7 @@ export default function DieselControl() {
     return !isNaN(h) && h > 0 ? h : null;
   }, [fc]);
 
-  const totalEntradas = entradas.reduce((s, e) => s + Number(e.litros), 0);
+  const totalEntradas = entradas.filter(e => !e.esAjuste).reduce((s, e) => s + Number(e.litros), 0);
   const totalConsumo  = consumos.reduce((s, c) => s + Number(c.litros), 0);
   const saldo = totalEntradas - totalConsumo;
   const pctConsumo = totalEntradas > 0 ? Math.min(100, (totalConsumo / totalEntradas) * 100) : 0;
@@ -849,7 +849,7 @@ export default function DieselControl() {
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 }}>
               {[
-                { label: "Diesel recibido",  value: `${totalEntradas.toLocaleString()} L`, sub: `${entradas.length} cargas`,   color: "#3b82f6", icon: "⬆" },
+                { label: "Diesel recibido",  value: `${totalEntradas.toLocaleString()} L`, sub: `${entradas.filter(e => !e.esAjuste).length} cargas`,   color: "#3b82f6", icon: "⬆" },
                 { label: "Diesel consumido", value: `${totalConsumo.toLocaleString()} L`,  sub: `${consumos.length} registros`, color: "#f59e0b", icon: "⬇" },
                 { label: "Saldo disponible", value: `${saldo.toLocaleString()} L`, sub: saldo >= 0 ? "En existencia" : "¡DÉFICIT!", color: saldo >= 100 ? "#10b981" : "#ef4444", icon: saldo >= 0 ? "✓" : "!" },
                 { label: "Unidades activas", value: rendimientos.length, sub: "con registros", color: "#8b5cf6", icon: "🚜" },
@@ -1304,10 +1304,8 @@ export default function DieselControl() {
             {/* Botones exportar PDF */}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }} data-noprint>
               {[
-                { label: "🚜 Tractores", tipo: "tractores", title: "Solo rendimiento de tractores por trabajo" },
-                { label: "🌾 Trilladoras y Camiones", tipo: "trilladoras", title: "Trilladoras y camiones" },
-                { label: "⛽ Ciclo actual", tipo: "ciclo-actual", title: "Solo el ciclo de diésel en curso" },
-                { label: "⛽ Todos los ciclos", tipo: "ciclos", title: "Todos los ciclos de carga" },
+                { label: "📄 Rendimiento", tipo: "rendimiento", title: "Tractores, cosechadoras y camiones — sin diésel" },
+                { label: "⛽ Diésel", tipo: "diesel", title: "Desglose completo de ciclos y saldo de diésel" },
               ].map(({ label, tipo, title }) => (
                 <button key={tipo} title={title} onClick={() => {
                   document.body.setAttribute("data-print", tipo);
@@ -1333,8 +1331,8 @@ export default function DieselControl() {
 
             {/* Tractores: L/hr por trabajo */}
             <div id="seccion-tractores" style={S.card}>
-              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚜 Tractores — L/hr por trabajo</div>
-              <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>Rendimiento de cada tractor desglosado por tipo de trabajo.</div>
+              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚜 Tractores y Cosechadoras — L/hr por trabajo</div>
+              <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>Rendimiento de cada unidad desglosado por tipo de trabajo.</div>
               {rendTractoresPorTrabajo.length === 0
                 ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin datos suficientes. Registra consumos con horómetro.</div>
                 : (() => {
@@ -1371,16 +1369,14 @@ export default function DieselControl() {
               }
             </div>
 
-            {/* Trilladoras y Camiones */}
+            {/* Trilladoras y Camiones — dentro del mismo reporte de rendimiento */}
             <div id="seccion-trilladoras-camiones">
               <TrilladorasHaCard consumos={consumos} />
               <CamionesViajeCard consumos={consumos} />
             </div>
 
-            {/* Ciclos de Carga — todos */}
-            <div id="seccion-ciclos"><CiclosCargaCard consumos={consumos} entradas={entradas} soloActual={false} /></div>
-            {/* Ciclo actual — solo para PDF de ciclo actual */}
-            <div id="seccion-ciclo-actual" style={{ display: "none" }}><CiclosCargaCard consumos={consumos} entradas={entradas} soloActual={true} /></div>
+            {/* Diésel: ciclos de carga — reporte separado */}
+            <div id="seccion-diesel"><CiclosCargaCard consumos={consumos} entradas={entradas} soloActual={false} /></div>
 
             {/* Balance detallado — oculto en PDF */}
             <div id="balance-detallado" style={S.card}>

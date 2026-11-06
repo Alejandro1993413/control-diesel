@@ -538,7 +538,7 @@ export default function DieselControl() {
     setLoading(true);
     const [c, e] = await Promise.all([api("getConsumos"), api("getEntradas")]);
     if (c) setConsumos(c.map(r => ({ ...r, litros: Number(r.litros), horas: r.horas === "N/A" ? "N/A" : Number(r.horas) })));
-    if (e) setEntradas(e.map(r => ({ ...r, litros: Number(r.litros) })));
+    if (e) setEntradas(e.map(r => ({ ...r, litros: Number(r.litros), esAjuste: r.esAjuste === true || r.esAjuste === "true" || r.esAjuste === "TRUE" })));
     setLoading(false);
   }, [api]);
 
@@ -1375,8 +1375,8 @@ export default function DieselControl() {
               <CamionesViajeCard consumos={consumos} />
             </div>
 
-            {/* Diésel: ciclos de carga — reporte separado */}
-            <div id="seccion-diesel"><CiclosCargaCard consumos={consumos} entradas={entradas} soloActual={false} /></div>
+            {/* Diésel: solo ciclo actual — reporte separado */}
+            <div id="seccion-diesel"><CiclosCargaCard consumos={consumos} entradas={entradas} soloActual={true} /></div>
 
             {/* Balance detallado — oculto en PDF */}
             <div id="balance-detallado" style={S.card}>

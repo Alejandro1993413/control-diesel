@@ -117,4 +117,19 @@ body { background: #0f0f0f; }
   }
 
   @page { margin: 1.8cm 1.5cm; size: A4 portrait; }
+
+  /* PDF: solo rendimiento (tractores/trilladoras/camiones) */
+  body[data-print="rendimiento"] #seccion-ciclos { display: none !important; }
+
+  /* PDF: solo ciclo actual */
+  body[data-print="ciclo-actual"] #seccion-rendimiento,
+  body[data-print="ciclo-actual"] #seccion-trilladoras,
+  body[data-print="ciclo-actual"] #seccion-camiones,
+  body[data-print="ciclo-actual"] #seccion-ciclos { display: none !important; }
+  body[data-print="ciclo-actual"] #seccion-ciclo-actual { display: block !important; }
+
+  /* PDF: todos los ciclos */
+  body[data-print="ciclos"] #seccion-rendimiento,
+  body[data-print="ciclos"] #seccion-trilladoras,
+  body[data-print="ciclos"] #seccion-camiones { display: none !important; }
 }

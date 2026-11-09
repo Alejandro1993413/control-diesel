@@ -6,7 +6,8 @@ const TRABAJOS = [
   "Trilla trigo", "Trilla Maiz", "Trilla Garbanzo",
   "Tumba de bordos con arado", "Tumba de bordos con canalera",
   "Movimiento y compactacion modulador", "Traslado de modulos",
-  "Desvare", "Desenraizadora", "Aplicacion con aspersora", "Traslado de pipa", "Varios"
+  "Desvare", "Desenraizadora", "Aplicacion con aspersora", "Traslado de pipa",
+  "Fertilización", "Varios"
 ];
 
 const UNIDADES = [
@@ -1000,10 +1001,19 @@ export default function DieselControl() {
                 {fc.unidad !== "Otros" && (
                   <div>
                     <label style={S.label}>Trabajo realizado</label>
-                    <select style={S.input} value={fc.trabajo} onChange={e => setFc(p => ({ ...p, trabajo: e.target.value }))}>
+                    <select style={S.input}
+                      value={TRABAJOS.includes(fc.trabajo) || fc.trabajo === "" ? fc.trabajo : "__otro__"}
+                      onChange={e => setFc(p => ({ ...p, trabajo: e.target.value === "__otro__" ? "" : e.target.value, _trabajoOtro: e.target.value === "__otro__" }))}>
                       <option value="">Sin especificar</option>
                       {TRABAJOS.map(t => <option key={t}>{t}</option>)}
+                      <option value="__otro__">✏️ Otro (escribir)…</option>
                     </select>
+                    {(fc._trabajoOtro || (!TRABAJOS.includes(fc.trabajo) && fc.trabajo !== "")) && (
+                      <input style={{ ...S.input, marginTop: 6 }}
+                        placeholder="Escribe el trabajo..."
+                        value={TRABAJOS.includes(fc.trabajo) ? "" : fc.trabajo}
+                        onChange={e => setFc(p => ({ ...p, trabajo: e.target.value, _trabajoOtro: true }))} />
+                    )}
                   </div>
                 )}
                 {fc.unidad === "Otros" && (

@@ -455,8 +455,9 @@ function WorkBadge({ trabajo }) {
 
 export default function DieselControl() {
   const [tab, setTab] = useState("dashboard");
-  const [alertaVentana, setAlertaVentana] = useState(7);   // días activos recientes
-  const [alertaUmbral,  setAlertaUmbral]  = useState(50);  // % sobre promedio histórico
+  const [alertaVentana,   setAlertaVentana]   = useState(7);   // días activos recientes
+  const [alertaUmbral,    setAlertaUmbral]    = useState(50);  // % sobre promedio histórico
+  const [alertasIgnoradas, setAlertasIgnoradas] = useState({}); // { alertaKey: true }
   const [consumos, setConsumos] = useState([]);
   const [entradas, setEntradas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -596,55 +597,75 @@ export default function DieselControl() {
   }, [consumos]);
 
   // ── Alertas de anomalías ──────────────────────────────────
-  const alertas = useMemo(() => {
+  const alertasRaw = useMemo(() => {
     const resultado = [];
-    const LITROS_MULT = 2.0;  // veces el promedio: carga excesiva
+    const LITROS_MULT = 2.0;
 
-    // Promedio de litros por registro para cada unidad
-    const promedioLitros = {};
+    // ── 1. Carga inusual por unidad (litros por registro) ────
     const mapaUnidad = {};
     consumos.forEach(c => {
       if (!mapaUnidad[c.unidad]) mapaUnidad[c.unidad] = [];
       mapaUnidad[c.unidad].push(Number(c.litros || 0));
     });
+    const promedioLitros = {};
     Object.entries(mapaUnidad).forEach(([u, arr]) => {
       promedioLitros[u] = arr.reduce((s, v) => s + v, 0) / arr.length;
     });
-
     consumos.forEach(c => {
       const litros = Number(c.litros || 0);
       const prom   = promedioLitros[c.unidad] || 0;
-
-      // Alerta: carga mucho mayor al promedio (posible robo o error)
       if (prom > 0 && litros > prom * LITROS_MULT && mapaUnidad[c.unidad].length >= 3) {
         resultado.push({
           tipo: "litros",
           nivel: litros > prom * 3 ? "rojo" : "naranja",
-          fecha: c.fecha,
-          unidad: c.unidad,
-          litros,
+          fecha: c.fecha, unidad: c.unidad, litros,
           promedio: prom.toFixed(0),
           msg: `Carga inusual: ${litros} L (promedio histórico ${prom.toFixed(0)} L)`,
           id: c.id,
-        });
-      }
-
-      // Alerta: litros registrados sin horas (N/A) en unidad con horómetro
-      if (tieneHorometro(c.unidad) && c.horas === "N/A") {
-        resultado.push({
-          tipo: "na",
-          nivel: "gris",
-          fecha: c.fecha,
-          unidad: c.unidad,
-          litros,
-          msg: `Sin horas registradas (N/A) — no se puede calcular rendimiento`,
-          id: c.id,
+          key: `litros-${c.id}`,
         });
       }
     });
 
-    // ── Alerta de ritmo de consumo ────────────────────────────
-    // Agrupa consumos por día activo (días con ≥1 registro)
+    // ── 2. Rendimiento L/hr por tractor+trabajo sube de golpe ─
+    // Calcula el L/hr promedio histórico acumulado de cada par unidad+trabajo
+    // y compara contra el último registro individual
+    const lphHist = {}; // key → { suma, count, lphArr }
+    // Usamos registros ordenados por fecha para detectar el último
+    const consSorted = [...consumos]
+      .filter(c => tieneHorometro(c.unidad) && Number(c.horas) > 0 && Number(c.litros) > 0)
+      .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+
+    consSorted.forEach(c => {
+      const k = `${c.unidad}||${c.trabajo || "Sin trabajo"}`;
+      if (!lphHist[k]) lphHist[k] = { unidad: c.unidad, trabajo: c.trabajo || "Sin trabajo", vals: [] };
+      lphHist[k].vals.push({ lph: Number(c.litros) / Number(c.horas), id: c.id, fecha: c.fecha, litros: Number(c.litros), horas: Number(c.horas) });
+    });
+
+    Object.values(lphHist).forEach(({ unidad, trabajo, vals }) => {
+      if (vals.length < 4) return; // necesitamos historial suficiente
+      const ultimo = vals[vals.length - 1];
+      const anteriores = vals.slice(0, -1);
+      const promLph = anteriores.reduce((s, v) => s + v.lph, 0) / anteriores.length;
+      const pct = promLph > 0 ? ((ultimo.lph - promLph) / promLph) * 100 : 0;
+      if (pct > alertaUmbral) {
+        resultado.push({
+          tipo: "rendimiento",
+          nivel: pct > alertaUmbral * 2 ? "rojo" : "naranja",
+          fecha: ultimo.fecha,
+          unidad, trabajo,
+          litros: ultimo.litros,
+          lph: ultimo.lph.toFixed(2),
+          promLph: promLph.toFixed(2),
+          pctSobre: Math.round(pct),
+          msg: `Rendimiento inusual en ${trabajo}: ${ultimo.lph.toFixed(2)} L/hr (histórico ${promLph.toFixed(2)} L/hr, +${Math.round(pct)}%)`,
+          id: ultimo.id,
+          key: `rendimiento-${unidad}-${trabajo}`,
+        });
+      }
+    });
+
+    // ── 3. Ritmo de consumo general ───────────────────────────
     const diasMap = {};
     consumos.forEach(c => {
       const d = toDateStr(c.fecha);
@@ -654,16 +675,13 @@ export default function DieselControl() {
     const diasActivos = Object.entries(diasMap)
       .map(([dia, litros]) => ({ dia, litros }))
       .sort((a, b) => a.dia.localeCompare(b.dia));
-
     const totalDias = diasActivos.length;
-    // Necesitamos al menos ventana días recientes + 3 días históricos para comparar
     if (totalDias >= alertaVentana + 3) {
       const historico  = diasActivos.slice(0, totalDias - alertaVentana);
       const recientes  = diasActivos.slice(totalDias - alertaVentana);
       const promHist   = historico.reduce((s, d) => s + d.litros, 0) / historico.length;
       const promRecent = recientes.reduce((s, d) => s + d.litros, 0) / recientes.length;
       const pctSobre   = promHist > 0 ? ((promRecent - promHist) / promHist) * 100 : 0;
-
       if (pctSobre > alertaUmbral) {
         resultado.push({
           tipo: "ritmo",
@@ -676,14 +694,23 @@ export default function DieselControl() {
           ventana: alertaVentana,
           msg: `Ritmo elevado: ${Math.round(promRecent)} L/día activo (últ. ${alertaVentana} días) vs ${Math.round(promHist)} L/día histórico (+${Math.round(pctSobre)}%)`,
           id: "ritmo",
+          key: "ritmo",
         });
       }
     }
 
-    // Ordenar: rojos primero, luego naranjas, luego grises; dentro de cada grupo más reciente primero
     const orden = { rojo: 0, naranja: 1, gris: 2 };
     return resultado.sort((a, b) => orden[a.nivel] - orden[b.nivel] || String(b.fecha).localeCompare(String(a.fecha)));
   }, [consumos, alertaVentana, alertaUmbral]);
+
+  // Filtrar alertas ignoradas
+  const alertas = useMemo(
+    () => alertasRaw.filter(a => !alertasIgnoradas[a.key]),
+    [alertasRaw, alertasIgnoradas]
+  );
+  function ignorarAlerta(key) {
+    setAlertasIgnoradas(prev => ({ ...prev, [key]: true }));
+  }
 
   // Auto-fill horómetro anterior
   function getUltimoHorometro(unidad) {
@@ -959,24 +986,29 @@ export default function DieselControl() {
                       };
                       const c = colores[a.nivel];
                       return (
-                        <div key={`${a.id}-${a.tipo}-${i}`} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div key={a.key} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
                             <span style={{ fontSize: 14 }}>{c.icon}</span>
-                            <div>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.unidad}</div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.unidad}{a.trabajo ? ` · ${a.trabajo}` : ""}</div>
                               <div style={{ fontSize: 11, color: "#71717a", marginTop: 1 }}>{a.msg}</div>
                             </div>
                           </div>
-                          <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                            <div style={{ fontSize: 11, color: "#52525b" }}>{a.tipo === "ritmo" ? `Últ. ${a.ventana} días` : formatDate(a.fecha)}</div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.tipo === "ritmo" ? `+${a.pctSobre}%` : `${a.litros} L`}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                            <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                              <div style={{ fontSize: 11, color: "#52525b" }}>{a.tipo === "ritmo" ? `Últ. ${a.ventana} días` : formatDate(a.fecha)}</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.tipo === "ritmo" || a.tipo === "rendimiento" ? `+${a.pctSobre}%` : `${a.litros} L`}</div>
+                            </div>
+                            <button onClick={() => ignorarAlerta(a.key)}
+                              title="Ignorar esta alerta"
+                              style={{ background: "transparent", border: "1px solid #3f3f46", color: "#52525b", borderRadius: 6, width: 24, height: 24, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
                           </div>
                         </div>
                       );
                     })}
                   </div>
                   <div style={{ fontSize: 10, color: "#3f3f46", marginTop: 10 }}>
-                    Carga inusual: registro que supera 2× el promedio de esa unidad (mín. 3 registros). Ritmo: promedio L/día activo en la ventana vs histórico.
+                    Carga inusual: registro 2× el promedio de esa unidad (mín. 3). Rendimiento: último L/hr del tractor vs histórico por trabajo (mín. 4). Ritmo: L/día activo reciente vs histórico. × descarta la alerta hasta recargar.
                   </div>
                 </>
               )}

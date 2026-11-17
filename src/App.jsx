@@ -596,7 +596,6 @@ export default function DieselControl() {
   // ── Alertas de anomalías ──────────────────────────────────
   const alertas = useMemo(() => {
     const resultado = [];
-    const LPH_MAX = 20;       // L/hr: por encima es sospechoso
     const LITROS_MULT = 2.0;  // veces el promedio: carga excesiva
 
     // Promedio de litros por registro para cada unidad
@@ -612,24 +611,7 @@ export default function DieselControl() {
 
     consumos.forEach(c => {
       const litros = Number(c.litros || 0);
-      const horas  = c.horas !== "N/A" && c.horas ? Number(c.horas) : null;
-      const lph    = horas && horas > 0 ? litros / horas : null;
       const prom   = promedioLitros[c.unidad] || 0;
-
-      // Alerta: L/hr muy alto (posible fuga mecánica o error de registro)
-      if (lph !== null && lph > LPH_MAX) {
-        resultado.push({
-          tipo: "lph",
-          nivel: lph > 25 ? "rojo" : "naranja",
-          fecha: c.fecha,
-          unidad: c.unidad,
-          litros,
-          horas,
-          lph: lph.toFixed(1),
-          msg: `Rendimiento alto: ${lph.toFixed(1)} L/hr (límite ${LPH_MAX})`,
-          id: c.id,
-        });
-      }
 
       // Alerta: carga mucho mayor al promedio (posible robo o error)
       if (prom > 0 && litros > prom * LITROS_MULT && mapaUnidad[c.unidad].length >= 3) {
@@ -640,7 +622,7 @@ export default function DieselControl() {
           unidad: c.unidad,
           litros,
           promedio: prom.toFixed(0),
-          msg: `Carga inusual: ${litros} L (promedio ${prom.toFixed(0)} L)`,
+          msg: `Carga inusual: ${litros} L (promedio histórico ${prom.toFixed(0)} L)`,
           id: c.id,
         });
       }
@@ -930,14 +912,14 @@ export default function DieselControl() {
                         </div>
                         <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                           <div style={{ fontSize: 11, color: "#52525b" }}>{formatDate(a.fecha)}</div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.litros} L{a.lph ? ` · ${a.lph} L/hr` : ""}</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.litros} L</div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
                 <div style={{ fontSize: 10, color: "#3f3f46", marginTop: 10 }}>
-                  Umbrales: &gt;{20} L/hr o carga &gt;2× el promedio de la unidad (mín. 3 registros). Revisa y confirma con el operador.
+                  Alerta cuando un registro supera 2× el promedio histórico de esa unidad (mín. 3 registros). Revisa y confirma con el operador.
                 </div>
               </div>
             )}

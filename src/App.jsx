@@ -457,7 +457,9 @@ export default function DieselControl() {
   const [tab, setTab] = useState("dashboard");
   const [alertaVentana,   setAlertaVentana]   = useState(7);   // días activos recientes
   const [alertaUmbral,    setAlertaUmbral]    = useState(50);  // % sobre promedio histórico
-  const [alertasIgnoradas, setAlertasIgnoradas] = useState({}); // { alertaKey: true }
+  const [alertasIgnoradas, setAlertasIgnoradas] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("alertasIgnoradas") || "{}"); } catch { return {}; }
+  });
   const [consumos, setConsumos] = useState([]);
   const [entradas, setEntradas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -709,7 +711,11 @@ export default function DieselControl() {
     [alertasRaw, alertasIgnoradas]
   );
   function ignorarAlerta(key) {
-    setAlertasIgnoradas(prev => ({ ...prev, [key]: true }));
+    setAlertasIgnoradas(prev => {
+      const nuevo = { ...prev, [key]: true };
+      try { localStorage.setItem("alertasIgnoradas", JSON.stringify(nuevo)); } catch {}
+      return nuevo;
+    });
   }
 
   // Auto-fill horómetro anterior

@@ -455,6 +455,8 @@ function WorkBadge({ trabajo }) {
 
 export default function DieselControl() {
   const [tab, setTab] = useState("dashboard");
+  const [alertaVentana, setAlertaVentana] = useState(7);   // días activos recientes
+  const [alertaUmbral,  setAlertaUmbral]  = useState(50);  // % sobre promedio histórico
   const [consumos, setConsumos] = useState([]);
   const [entradas, setEntradas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -641,10 +643,47 @@ export default function DieselControl() {
       }
     });
 
+    // ── Alerta de ritmo de consumo ────────────────────────────
+    // Agrupa consumos por día activo (días con ≥1 registro)
+    const diasMap = {};
+    consumos.forEach(c => {
+      const d = toDateStr(c.fecha);
+      if (!d) return;
+      diasMap[d] = (diasMap[d] || 0) + Number(c.litros || 0);
+    });
+    const diasActivos = Object.entries(diasMap)
+      .map(([dia, litros]) => ({ dia, litros }))
+      .sort((a, b) => a.dia.localeCompare(b.dia));
+
+    const totalDias = diasActivos.length;
+    // Necesitamos al menos ventana días recientes + 3 días históricos para comparar
+    if (totalDias >= alertaVentana + 3) {
+      const historico  = diasActivos.slice(0, totalDias - alertaVentana);
+      const recientes  = diasActivos.slice(totalDias - alertaVentana);
+      const promHist   = historico.reduce((s, d) => s + d.litros, 0) / historico.length;
+      const promRecent = recientes.reduce((s, d) => s + d.litros, 0) / recientes.length;
+      const pctSobre   = promHist > 0 ? ((promRecent - promHist) / promHist) * 100 : 0;
+
+      if (pctSobre > alertaUmbral) {
+        resultado.push({
+          tipo: "ritmo",
+          nivel: pctSobre > alertaUmbral * 2 ? "rojo" : "naranja",
+          fecha: recientes[recientes.length - 1].dia,
+          unidad: "Todas las unidades",
+          litros: Math.round(promRecent),
+          promedio: Math.round(promHist),
+          pctSobre: Math.round(pctSobre),
+          ventana: alertaVentana,
+          msg: `Ritmo elevado: ${Math.round(promRecent)} L/día activo (últ. ${alertaVentana} días) vs ${Math.round(promHist)} L/día histórico (+${Math.round(pctSobre)}%)`,
+          id: "ritmo",
+        });
+      }
+    }
+
     // Ordenar: rojos primero, luego naranjas, luego grises; dentro de cada grupo más reciente primero
     const orden = { rojo: 0, naranja: 1, gris: 2 };
     return resultado.sort((a, b) => orden[a.nivel] - orden[b.nivel] || String(b.fecha).localeCompare(String(a.fecha)));
-  }, [consumos]);
+  }, [consumos, alertaVentana, alertaUmbral]);
 
   // Auto-fill horómetro anterior
   function getUltimoHorometro(unidad) {
@@ -887,42 +926,61 @@ export default function DieselControl() {
             </div>
 
             {/* ⚠️ ALERTAS */}
-            {alertas.length > 0 && (
-              <div style={{ background: "#18181b", borderRadius: 16, padding: "20px 24px", border: "1px solid #ef444430" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: "#ef4444" }}>⚠️ Alertas de anomalías</div>
-                  <div style={{ fontSize: 11, color: "#71717a" }}>{alertas.filter(a => a.nivel !== "gris").length} sospechosas · {alertas.filter(a => a.nivel === "gris").length} sin horas</div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {alertas.map((a, i) => {
-                    const colores = {
-                      rojo:    { bg: "#1c0000", border: "#ef444440", text: "#fca5a5", icon: "🔴" },
-                      naranja: { bg: "#1c1000", border: "#f9731640", text: "#fdba74", icon: "🟠" },
-                      gris:    { bg: "#18181b", border: "#3f3f4660", text: "#71717a", icon: "⚪" },
-                    };
-                    const c = colores[a.nivel];
-                    return (
-                      <div key={`${a.id}-${a.tipo}`} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <span style={{ fontSize: 14 }}>{c.icon}</span>
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.unidad}</div>
-                            <div style={{ fontSize: 11, color: "#71717a", marginTop: 1 }}>{a.msg}</div>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                          <div style={{ fontSize: 11, color: "#52525b" }}>{formatDate(a.fecha)}</div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.litros} L</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ fontSize: 10, color: "#3f3f46", marginTop: 10 }}>
-                  Alerta cuando un registro supera 2× el promedio histórico de esa unidad (mín. 3 registros). Revisa y confirma con el operador.
+            <div style={{ background: "#18181b", borderRadius: 16, padding: "20px 24px", border: "1px solid #27272a" }}>
+              {/* Config de ritmo */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: alertas.length > 0 ? "#ef4444" : "#71717a" }}>⚠️ Alertas</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, color: "#71717a" }}>Ritmo:</span>
+                  <select value={alertaVentana} onChange={e => setAlertaVentana(Number(e.target.value))}
+                    style={{ background: "#27272a", border: "1px solid #3f3f46", color: "#a1a1aa", borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer" }}>
+                    <option value={7}>7 días activos</option>
+                    <option value={14}>14 días activos</option>
+                    <option value={30}>30 días activos</option>
+                  </select>
+                  <select value={alertaUmbral} onChange={e => setAlertaUmbral(Number(e.target.value))}
+                    style={{ background: "#27272a", border: "1px solid #3f3f46", color: "#a1a1aa", borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer" }}>
+                    <option value={25}>+25%</option>
+                    <option value={50}>+50%</option>
+                    <option value={100}>+100%</option>
+                  </select>
                 </div>
               </div>
-            )}
+              {alertas.length === 0 ? (
+                <div style={{ fontSize: 12, color: "#52525b", textAlign: "center", padding: "12px 0" }}>Sin alertas activas ✓</div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {alertas.map((a, i) => {
+                      const colores = {
+                        rojo:    { bg: "#1c0000", border: "#ef444440", text: "#fca5a5", icon: "🔴" },
+                        naranja: { bg: "#1c1000", border: "#f9731640", text: "#fdba74", icon: "🟠" },
+                        gris:    { bg: "#18181b", border: "#3f3f4660", text: "#71717a", icon: "⚪" },
+                      };
+                      const c = colores[a.nivel];
+                      return (
+                        <div key={`${a.id}-${a.tipo}-${i}`} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 14 }}>{c.icon}</span>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.unidad}</div>
+                              <div style={{ fontSize: 11, color: "#71717a", marginTop: 1 }}>{a.msg}</div>
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                            <div style={{ fontSize: 11, color: "#52525b" }}>{a.tipo === "ritmo" ? `Últ. ${a.ventana} días` : formatDate(a.fecha)}</div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.tipo === "ritmo" ? `+${a.pctSobre}%` : `${a.litros} L`}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#3f3f46", marginTop: 10 }}>
+                    Carga inusual: registro que supera 2× el promedio de esa unidad (mín. 3 registros). Ritmo: promedio L/día activo en la ventana vs histórico.
+                  </div>
+                </>
+              )}
+            </div>
 
             {rendimientos.length > 0 && (
               <div style={S.card}>

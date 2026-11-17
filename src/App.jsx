@@ -51,6 +51,16 @@ function tieneHorometro(u) { return CON_HOROMETRO.includes(u); }
 function tieneHectareas(u) { return CON_HECTAREAS.includes(u); }
 function tieneViajes(u)    { return CON_VIAJES.includes(u); }
 
+function toDateStr(d) {
+  if (!d) return "";
+  if (typeof d === "number") {
+    const dt = new Date((d - 25569) * 86400 * 1000);
+    return dt.toISOString().slice(0, 10);
+  }
+  if (typeof d === "string") return d.slice(0, 10);
+  return new Date(d).toISOString().slice(0, 10);
+}
+
 function formatDate(d) {
   if (!d) return "—";
   let date;
@@ -251,27 +261,9 @@ function TrilladorasHaCard({ consumos }) {
   );
 }
 
-const TRACTORES_ACTIVOS = [
-  "Tractor #1","Tractor #2","Tractor #3","Tractor #4",
-  "Tractor #5","Tractor #6","Tractor #7"
-];
-
-// Normaliza cualquier fecha a string "YYYY-MM-DD" sin problemas de zona horaria
-function toDateStr(d) {
-  if (!d) return "";
-  if (typeof d === "number") {
-    // Número de serie de Excel/Sheets
-    const dt = new Date((d - 25569) * 86400 * 1000);
-    return dt.toISOString().slice(0, 10);
-  }
-  if (typeof d === "string") return d.slice(0, 10);
-  return new Date(d).toISOString().slice(0, 10);
-}
-
 function CiclosCargaCard({ consumos, entradas, soloActual = false }) {
   const [cicloAbierto, setCicloAbierto] = useState(null);
 
-  // Agrupar entradas por día — excluir ajustes de saldo
   const gruposPorDia = useMemo(() => {
     const mapa = {};
     entradas.filter(e => !e.esAjuste).forEach(e => {
@@ -280,23 +272,22 @@ function CiclosCargaCard({ consumos, entradas, soloActual = false }) {
       mapa[dia].litros += Number(e.litros || 0);
       mapa[dia].entradas.push(e);
     });
-    // Ordenar por fecha ascendente
     return Object.values(mapa).sort((a, b) => a.dia.localeCompare(b.dia));
   }, [entradas]);
 
-  // Para cada grupo, los consumos van desde ese día hasta antes del siguiente grupo
   const ciclos = useMemo(() => {
     return gruposPorDia.map((grupo, idx) => {
       const diaInicio = grupo.dia;
+      const diaSiguiente = (() => {
+        const d = new Date(diaInicio + "T12:00:00");
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().slice(0, 10);
+      })();
       const diaFin = gruposPorDia[idx + 1] ? gruposPorDia[idx + 1].dia : null;
 
-      // Los consumos de este ciclo: primero los asignados manualmente (cicloId),
-      // luego los que caen por fecha (día siguiente al de la entrada hasta antes de la próxima carga)
-      const diaSiguiente = (() => { const d = new Date(diaInicio + "T12:00:00"); d.setDate(d.getDate() + 1); return toDateStr(d); })();
       const consumosCiclo = consumos.filter(c => {
-        // Asignación manual explícita: cicloId es la fecha del día de carga
-        if (c.cicloId) return c.cicloId === diaInicio;
-        // Fallback automático por fecha
+        if (c.cicloId === diaInicio) return true;
+        if (c.cicloId) return false;
         const dc = toDateStr(c.fecha);
         return dc >= diaSiguiente && (diaFin === null || dc < diaFin);
       });
@@ -304,185 +295,151 @@ function CiclosCargaCard({ consumos, entradas, soloActual = false }) {
       const totalConsumo = consumosCiclo.reduce((s, c) => s + Number(c.litros || 0), 0);
       const saldo = grupo.litros - totalConsumo;
 
-      // Mapa dia → set de tractores con consumo
       const diasConConsumo = {};
       consumosCiclo.forEach(c => {
-        const dc = toDateStr(c.fecha);
-        if (!diasConConsumo[dc]) diasConConsumo[dc] = new Set();
-        if (TRACTORES_ACTIVOS.includes(c.unidad)) diasConConsumo[dc].add(c.unidad);
+        const d = toDateStr(c.fecha);
+        if (!diasConConsumo[d]) diasConConsumo[d] = new Set();
+        if (c.unidad && c.unidad.startsWith("Tractor")) diasConConsumo[d].add(c.unidad);
       });
 
-      // Lista de días desde diaInicio hasta hoy (o día antes de diaFin)
-      const hoyStr = toDateStr(new Date());
-      const limStr = diaFin
-        ? (diaFin < hoyStr ? (() => { const d = new Date(diaFin + "T12:00:00"); d.setDate(d.getDate()-1); return toDateStr(d); })() : hoyStr)
-        : hoyStr;
       const dias = [];
-      const cur = new Date(diaSiguiente + "T12:00:00");
-      const lim = new Date(limStr + "T12:00:00");
-      while (cur <= lim) {
-        dias.push(toDateStr(cur));
-        cur.setDate(cur.getDate() + 1);
+      if (consumosCiclo.length > 0) {
+        const start = new Date(diaSiguiente + "T12:00:00");
+        const end = diaFin ? new Date(diaFin + "T12:00:00") : new Date();
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          dias.push(d.toISOString().slice(0, 10));
+        }
       }
 
-      // Proveedores del grupo
       const proveedores = [...new Set(grupo.entradas.map(e => e.proveedor).filter(Boolean))].join(", ");
 
       return { grupo, consumosCiclo, totalConsumo, saldo, diasConConsumo, dias, esActual: diaFin === null, proveedores };
     });
   }, [gruposPorDia, consumos]);
 
+  const ciclosRender = soloActual ? ciclos.slice(-1) : [...ciclos].reverse();
+
   if (ciclos.length === 0) {
     return (
-      <div style={{ background: "#111113", border: "1px solid #27272a", borderRadius: 18, padding: "20px" }}>
-        <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>⛽ Ciclos por carga</div>
-        <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>
-          Sin entradas registradas aún.
-        </div>
+      <div style={{ background: "#111113", border: "1px solid #27272a", borderRadius: 18, padding: "24px", textAlign: "center", color: "#52525b", fontSize: 14 }}>
+        Sin cargas de diesel registradas aún.
       </div>
     );
   }
 
   return (
-    <div style={{ background: "#111113", border: "1px solid #27272a", borderRadius: 18, padding: "20px" }}>
-      <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>⛽ Ciclos por carga</div>
-      <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>
-        Entradas del mismo día se suman como una sola carga. ✓ = tractor registró ese día · <span style={{ color: "#ef4444" }}>✕</span> = sin registro.
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {ciclosRender.map((ciclo, idx) => {
+        const cid = ciclo.grupo.dia;
+        const abierto = soloActual || cicloAbierto === cid;
+        const numCiclo = ciclos.findIndex(c => c.grupo.dia === cid) + 1;
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {(soloActual ? [ciclos[ciclos.length - 1]].filter(Boolean) : [...ciclos].reverse()).map((ciclo, idx) => {
-          const cid = ciclo.grupo.dia;
-          const abierto = soloActual || cicloAbierto === cid;
-          const numCiclo = ciclos.length - idx;
+        const consumoPorUnidad = {};
+        ciclo.consumosCiclo.forEach(c => {
+          if (!consumoPorUnidad[c.unidad]) consumoPorUnidad[c.unidad] = 0;
+          consumoPorUnidad[c.unidad] += Number(c.litros || 0);
+        });
 
-          return (
-            <div key={cid} style={{ border: "1px solid #27272a", borderRadius: 12, overflow: "hidden" }}>
-              {/* Encabezado */}
-              <div
-                onClick={() => setCicloAbierto(abierto ? null : cid)}
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", cursor: "pointer", background: abierto ? "#1a1a0a" : "#18181b" }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 28, height: 28, background: "#f59e0b20", border: "1px solid #f59e0b40", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#f59e0b" }}>
-                    {numCiclo}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>
-                      {ciclo.proveedores || "Carga"} — {ciclo.grupo.litros.toLocaleString()} L
-                      {ciclo.grupo.entradas.length > 1 && (
-                        <span style={{ marginLeft: 6, fontSize: 10, color: "#71717a" }}>({ciclo.grupo.entradas.length} entradas)</span>
-                      )}
-                      {ciclo.esActual && <span style={{ marginLeft: 8, fontSize: 10, background: "#10b98120", color: "#34d399", border: "1px solid #10b98140", borderRadius: 4, padding: "1px 6px", fontWeight: 700 }}>ACTUAL</span>}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#71717a", marginTop: 2 }}>
-                      {formatDate(ciclo.grupo.dia)} · {ciclo.consumosCiclo.length} consumos
-                    </div>
-                  </div>
+        const auditoriaPorDia = {};
+        ciclo.consumosCiclo.forEach(c => {
+          const d = toDateStr(c.fecha);
+          if (!auditoriaPorDia[d]) auditoriaPorDia[d] = [];
+          auditoriaPorDia[d].push(c);
+        });
+
+        return (
+          <div key={cid} style={{ background: "#111113", border: `1px solid ${ciclo.esActual ? "#f59e0b40" : "#27272a"}`, borderRadius: 16, overflow: "hidden" }}>
+            {/* Header del ciclo */}
+            <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: soloActual ? "default" : "pointer", background: ciclo.esActual ? "#1a1200" : "transparent" }}
+              onClick={() => !soloActual && setCicloAbierto(abierto ? null : cid)}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, background: ciclo.esActual ? "#f59e0b" : "#27272a", color: ciclo.esActual ? "#18181b" : "#71717a", borderRadius: 6, padding: "2px 8px", letterSpacing: "0.06em" }}>
+                  {ciclo.esActual ? "ACTUAL" : `CICLO ${numCiclo}`}
                 </div>
-                <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 11, color: "#52525b" }}>Consumido</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#f59e0b" }}>{ciclo.totalConsumo.toLocaleString()} L</div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>
+                    Carga {formatDate(cid)} — {ciclo.grupo.litros.toLocaleString()} L
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 11, color: "#52525b" }}>Saldo</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: ciclo.saldo >= 0 ? "#10b981" : "#ef4444" }}>
-                      {ciclo.saldo >= 0 ? "+" : ""}{ciclo.saldo.toLocaleString()} L
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 16, color: "#52525b", transform: abierto ? "rotate(180deg)" : "none" }}>▾</div>
+                  {ciclo.proveedores && <div style={{ fontSize: 11, color: "#71717a", marginTop: 1 }}>{ciclo.proveedores}</div>}
                 </div>
               </div>
-
-              {/* Detalle expandido */}
-              {abierto && (
-                <div style={{ padding: "16px", borderTop: "1px solid #27272a", background: "#09090b" }}>
-
-                  {/* Auditoría diaria */}
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-                    Auditoría diaria de tractores
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: "#71717a" }}>Consumido</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#f59e0b" }}>{ciclo.totalConsumo.toLocaleString()} L</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: "#71717a" }}>Saldo</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: ciclo.saldo >= 0 ? "#10b981" : "#ef4444" }}>
+                    {ciclo.saldo >= 0 ? "+" : ""}{ciclo.saldo.toLocaleString()} L
                   </div>
-                  <div style={{ overflowX: "auto", marginBottom: 20 }}>
-                    <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: "100%" }}>
+                </div>
+                {!soloActual && <span style={{ fontSize: 14, color: "#71717a" }}>{abierto ? "▲" : "▼"}</span>}
+              </div>
+            </div>
+
+            {/* Detalle expandible */}
+            {abierto && (
+              <div style={{ borderTop: "1px solid #27272a", padding: "16px 18px", display: "flex", flexDirection: "column", gap: 16 }}>
+                {/* Consumo por unidad */}
+                {Object.keys(consumoPorUnidad).length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#a1a1aa", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>⛽ Consumo por unidad</div>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                       <thead>
                         <tr style={{ borderBottom: "1px solid #27272a" }}>
-                          <th style={{ textAlign: "left", padding: "0 12px 8px 0", fontSize: 10, color: "#52525b", fontWeight: 700, textTransform: "uppercase", whiteSpace: "nowrap" }}>Fecha</th>
-                          {TRACTORES_ACTIVOS.map(t => (
-                            <th key={t} style={{ textAlign: "center", padding: "0 6px 8px", fontSize: 10, color: "#52525b", fontWeight: 700, whiteSpace: "nowrap" }}>
-                              {t.replace("Tractor ", "T")}
-                            </th>
+                          {["Unidad", "Litros", "% del ciclo"].map(h => (
+                            <th key={h} style={{ textAlign: "left", padding: "0 10px 6px 0", fontSize: 10, color: "#52525b", fontWeight: 700, textTransform: "uppercase" }}>{h}</th>
                           ))}
-                          <th style={{ textAlign: "right", padding: "0 0 8px 12px", fontSize: 10, color: "#52525b", fontWeight: 700 }}>Total día</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {ciclo.dias.map(dia => {
-                          const tractoresDelDia = ciclo.diasConConsumo[dia] || new Set();
-                          const litrosDia = ciclo.consumosCiclo
-                            .filter(c => toDateStr(c.fecha) === dia)
-                            .reduce((s, c) => s + Number(c.litros || 0), 0);
-                          const tieneDatos = litrosDia > 0;
-                          return (
-                            <tr key={dia} style={{ borderBottom: "1px solid #1f1f22", opacity: tieneDatos ? 1 : 0.45 }}>
-                              <td style={{ padding: "7px 12px 7px 0", color: "#a1a1aa", whiteSpace: "nowrap", fontSize: 11 }}>
-                                {new Date(dia + "T12:00:00").toLocaleDateString("es-MX", { weekday: "short", day: "2-digit", month: "short" })}
-                              </td>
-                              {TRACTORES_ACTIVOS.map(t => (
-                                <td key={t} style={{ textAlign: "center", padding: "7px 6px" }}>
-                                  {tractoresDelDia.has(t)
-                                    ? <span style={{ color: "#10b981", fontSize: 14 }}>✓</span>
-                                    : tieneDatos
-                                      ? <span style={{ color: "#ef4444", fontSize: 12, opacity: 0.5 }}>✕</span>
-                                      : <span style={{ color: "#3f3f46", fontSize: 11 }}>—</span>
-                                  }
-                                </td>
-                              ))}
-                              <td style={{ textAlign: "right", padding: "7px 0 7px 12px", color: tieneDatos ? "#f59e0b" : "#3f3f46", fontWeight: tieneDatos ? 700 : 400, fontSize: 12 }}>
-                                {tieneDatos ? `${litrosDia} L` : "—"}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        {Object.entries(consumoPorUnidad).sort((a, b) => b[1] - a[1]).map(([u, l]) => (
+                          <tr key={u} style={{ borderBottom: "1px solid #1f1f22" }}>
+                            <td style={{ padding: "6px 10px 6px 0", fontWeight: 600 }}>{u}</td>
+                            <td style={{ padding: "6px 10px 6px 0", color: "#f59e0b" }}>{l.toLocaleString()} L</td>
+                            <td style={{ padding: "6px 0", color: "#71717a" }}>
+                              {ciclo.grupo.litros > 0 ? ((l / ciclo.grupo.litros) * 100).toFixed(1) + "%" : "—"}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
+                )}
 
-                  {/* Consumo por unidad */}
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-                    Consumo por unidad en este ciclo
+                {/* Auditoría diaria */}
+                {Object.keys(auditoriaPorDia).length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#a1a1aa", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>📅 Auditoría diaria</div>
+                    {Object.entries(auditoriaPorDia).sort((a, b) => a[0].localeCompare(b[0])).map(([dia, regs]) => {
+                      const totalDia = regs.reduce((s, c) => s + Number(c.litros || 0), 0);
+                      return (
+                        <div key={dia} style={{ marginBottom: 10, background: "#18181b", borderRadius: 10, padding: "10px 12px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 12, fontWeight: 700 }}>{formatDate(dia)}</span>
+                            <span style={{ fontSize: 12, color: "#f59e0b", fontWeight: 700 }}>{totalDia.toLocaleString()} L</span>
+                          </div>
+                          {regs.map((c, i) => (
+                            <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#a1a1aa", padding: "3px 0", borderTop: i > 0 ? "1px solid #27272a" : "none" }}>
+                              <span>{c.unidad}{c.trabajo ? ` · ${c.trabajo}` : ""}</span>
+                              <span style={{ color: "#f59e0b" }}>{Number(c.litros).toLocaleString()} L</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid #27272a" }}>
-                        {["Unidad","Litros","Registros"].map(h => (
-                          <th key={h} style={{ textAlign: "left", padding: "0 12px 8px 0", fontSize: 10, color: "#52525b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(
-                        ciclo.consumosCiclo.reduce((acc, c) => {
-                          if (!acc[c.unidad]) acc[c.unidad] = { litros: 0, count: 0 };
-                          acc[c.unidad].litros += Number(c.litros || 0);
-                          acc[c.unidad].count += 1;
-                          return acc;
-                        }, {})
-                      ).sort((a, b) => b[1].litros - a[1].litros).map(([unidad, v]) => (
-                        <tr key={unidad} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
-                          <td style={{ padding: "8px 12px 8px 0", fontWeight: 600 }}>{unidad}</td>
-                          <td style={{ padding: "8px 12px 8px 0", color: "#f59e0b", fontWeight: 700 }}>{v.litros} L</td>
-                          <td style={{ padding: "8px 0", color: "#71717a" }}>{v.count}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                )}
+
+                {ciclo.consumosCiclo.length === 0 && (
+                  <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "10px 0" }}>Sin consumos registrados en este ciclo.</div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -516,7 +473,6 @@ export default function DieselControl() {
   };
   const [fc, setFc] = useState(initialFc);
   const [fe, setFe] = useState({ fecha: "", litros: "", proveedor: "", factura: "", notas: "", esAjuste: false });
-  const [pdfMenu, setPdfMenu] = useState(false);
 
   function showMsg(text, type = "ok") {
     setMsg({ text, type });
@@ -974,7 +930,7 @@ export default function DieselControl() {
                       {UNIDADES.filter(u => u.startsWith("Camion")).map(u => <option key={u}>{u}</option>)}
                     </optgroup>
                     <optgroup label="── Otros ──">
-                      <option>Otros</option>
+                      <option value="Otros">Otros</option>
                     </optgroup>
                   </select>
                 </div>
@@ -983,45 +939,21 @@ export default function DieselControl() {
                   <input type="number" min="0" step="0.1" style={S.input} placeholder="0.0" value={fc.litros} onChange={e => setFc(p => ({ ...p, litros: e.target.value }))} />
                 </div>
                 <div>
-                  <label style={S.label}>Carga de diésel <span style={{ color: "#3f3f46", textTransform: "none", fontWeight: 400 }}>(opcional)</span></label>
-                  <select style={S.input} value={fc.cicloId} onChange={e => setFc(p => ({ ...p, cicloId: e.target.value }))}>
-                    <option value="">Asignar automáticamente por fecha</option>
-                    {Object.values(entradas.reduce((acc, e) => {
-                      const d = toDateStr(e.fecha);
-                      if (!acc[d]) acc[d] = { dia: d, litros: 0 };
-                      acc[d].litros += Number(e.litros || 0);
-                      return acc;
-                    }, {})).sort((a, b) => b.dia.localeCompare(a.dia)).map(g => (
-                      <option key={g.dia} value={g.dia}>
-                        {formatDate(g.dia)} — {g.litros.toLocaleString()} L
-                      </option>
-                    ))}
+                  <label style={S.label}>Trabajo realizado</label>
+                  <select style={S.input}
+                    value={TRABAJOS.includes(fc.trabajo) || fc.trabajo === "" ? fc.trabajo : "__otro__"}
+                    onChange={e => setFc(p => ({ ...p, trabajo: e.target.value === "__otro__" ? "" : e.target.value, _trabajoOtro: e.target.value === "__otro__" }))}>
+                    <option value="">Sin especificar</option>
+                    {TRABAJOS.map(t => <option key={t}>{t}</option>)}
+                    <option value="__otro__">✏️ Otro (escribir)…</option>
                   </select>
+                  {(fc._trabajoOtro || (!TRABAJOS.includes(fc.trabajo) && fc.trabajo !== "")) && (
+                    <input style={{ ...S.input, marginTop: 6 }}
+                      placeholder="Escribe el trabajo..."
+                      value={TRABAJOS.includes(fc.trabajo) ? "" : fc.trabajo}
+                      onChange={e => setFc(p => ({ ...p, trabajo: e.target.value, _trabajoOtro: true }))} />
+                  )}
                 </div>
-                {fc.unidad !== "Otros" && (
-                  <div>
-                    <label style={S.label}>Trabajo realizado</label>
-                    <select style={S.input}
-                      value={TRABAJOS.includes(fc.trabajo) || fc.trabajo === "" ? fc.trabajo : "__otro__"}
-                      onChange={e => setFc(p => ({ ...p, trabajo: e.target.value === "__otro__" ? "" : e.target.value, _trabajoOtro: e.target.value === "__otro__" }))}>
-                      <option value="">Sin especificar</option>
-                      {TRABAJOS.map(t => <option key={t}>{t}</option>)}
-                      <option value="__otro__">✏️ Otro (escribir)…</option>
-                    </select>
-                    {(fc._trabajoOtro || (!TRABAJOS.includes(fc.trabajo) && fc.trabajo !== "")) && (
-                      <input style={{ ...S.input, marginTop: 6 }}
-                        placeholder="Escribe el trabajo..."
-                        value={TRABAJOS.includes(fc.trabajo) ? "" : fc.trabajo}
-                        onChange={e => setFc(p => ({ ...p, trabajo: e.target.value, _trabajoOtro: true }))} />
-                    )}
-                  </div>
-                )}
-                {fc.unidad === "Otros" && (
-                  <div>
-                    <label style={S.label}>Concepto *</label>
-                    <input style={S.input} placeholder="Ej. Bomba de agua, generador, motosierra..." value={fc.notas} onChange={e => setFc(p => ({ ...p, notas: e.target.value }))} />
-                  </div>
-                )}
 
                 {fc.unidad && tieneViajes(fc.unidad) && (
                   <div>
@@ -1032,7 +964,32 @@ export default function DieselControl() {
                 )}
               </div>
 
-              {fc.unidad && fc.unidad !== "Otros" && !tieneViajes(fc.unidad) && (
+              {/* Concepto para "Otros" */}
+              {fc.unidad === "Otros" && (
+                <div style={{ marginTop: 14 }}>
+                  <label style={S.label}>Concepto / descripción</label>
+                  <input style={S.input} placeholder="Ej: Generador, bomba de riego..."
+                    value={fc.concepto || ""} onChange={e => setFc(p => ({ ...p, concepto: e.target.value }))} />
+                </div>
+              )}
+
+              {/* CicloId para asignar a una carga específica */}
+              {fc.unidad && (() => {
+                const cargasDias = entradas.filter(e => !e.esAjuste).map(e => toDateStr(e.fecha)).filter(Boolean);
+                const diasUnicos = [...new Set(cargasDias)].sort();
+                if (diasUnicos.length === 0) return null;
+                return (
+                  <div style={{ marginTop: 14 }}>
+                    <label style={S.label}>Asignar a carga de diésel <span style={{ color: "#3f3f46", textTransform: "none", fontWeight: 400 }}>(opcional)</span></label>
+                    <select style={S.input} value={fc.cicloId} onChange={e => setFc(p => ({ ...p, cicloId: e.target.value }))}>
+                      <option value="">Automático (por fecha)</option>
+                      {diasUnicos.map(d => <option key={d} value={d}>Carga del {formatDate(d)}</option>)}
+                    </select>
+                  </div>
+                );
+              })()}
+
+              {fc.unidad && !tieneViajes(fc.unidad) && fc.unidad !== "Otros" && (
                 <div style={{ marginTop: 16, background: "#09090b", borderRadius: 12, padding: 16, border: "1px solid #27272a" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.06em" }}>Horas de trabajo</span>
@@ -1159,19 +1116,6 @@ export default function DieselControl() {
                             <td style={{ padding: "10px 10px 10px 0", minWidth: 150 }}>
                               {isEditing
                                 ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                    <select style={S.inputSm} value={editData.cicloId ?? (c.cicloId || "")} onChange={e => setEditData(p => ({ ...p, cicloId: e.target.value }))}>
-                                      <option value="">Auto por fecha</option>
-                                      {Object.values(entradas.reduce((acc, e) => {
-                                        const d = toDateStr(e.fecha);
-                                        if (!acc[d]) acc[d] = { dia: d, litros: 0 };
-                                        acc[d].litros += Number(e.litros || 0);
-                                        return acc;
-                                      }, {})).sort((a, b) => b.dia.localeCompare(a.dia)).map(g => (
-                                        <option key={g.dia} value={g.dia}>
-                                          {formatDate(g.dia)} — {g.litros.toLocaleString()} L
-                                        </option>
-                                      ))}
-                                    </select>
                                     <input style={S.inputSm} placeholder="Notas..." value={editData.notas} onChange={e => setEditData(p => ({ ...p, notas: e.target.value }))} />
                                     {tieneHorometro(c.unidad) && (<>
                                       <select style={S.inputSm} value={editData.modoHorasEdit || c.modoHoras} onChange={e => setEditData(p => ({ ...p, modoHorasEdit: e.target.value }))}>
@@ -1194,6 +1138,17 @@ export default function DieselControl() {
                                     {tieneViajes(c.unidad) && (
                                       <input type="number" style={S.inputSm} placeholder="Viajes" value={editData.viajes} onChange={e => setEditData(p => ({ ...p, viajes: e.target.value }))} />
                                     )}
+                                    {(() => {
+                                      const diasCiclo = entradas.filter(e => !e.esAjuste).map(e => toDateStr(e.fecha)).filter(Boolean);
+                                      const unicos = [...new Set(diasCiclo)].sort();
+                                      if (unicos.length === 0) return null;
+                                      return (
+                                        <select style={S.inputSm} value={editData.cicloId} onChange={e => setEditData(p => ({ ...p, cicloId: e.target.value }))}>
+                                          <option value="">Ciclo automático</option>
+                                          {unicos.map(d => <option key={d} value={d}>Carga {formatDate(d)}</option>)}
+                                        </select>
+                                      );
+                                    })()}
                                   </div>
                                 : <span style={{ fontSize: 12, color: "#52525b" }}>
                                     {c.notas || "—"}
@@ -1281,11 +1236,11 @@ export default function DieselControl() {
                     </thead>
                     <tbody>
                       {[...entradas].reverse().map(e => (
-                        <tr key={e.id} className="row-hover" style={{ borderBottom: "1px solid #1f1f22" }}>
+                        <tr key={e.id} className="row-hover" style={{ borderBottom: "1px solid #1f1f22", opacity: e.esAjuste ? 0.75 : 1 }}>
                           <td style={{ padding: "10px 12px 10px 0", color: "#71717a", whiteSpace: "nowrap" }}>{formatDate(e.fecha)}</td>
-                          <td style={{ padding: "10px 12px 10px 0", color: "#10b981", fontWeight: 700 }}>
-                            +{e.litros} L
-                            {e.esAjuste && <span style={{ marginLeft: 6, fontSize: 10, background: "#f59e0b20", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: 4, padding: "1px 5px", fontWeight: 700 }}>AJUSTE</span>}
+                          <td style={{ padding: "10px 12px 10px 0", fontWeight: 700, whiteSpace: "nowrap" }}>
+                            <span style={{ color: e.esAjuste ? "#f59e0b" : "#10b981" }}>+{e.litros} L</span>
+                            {e.esAjuste && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, background: "#451a03", color: "#f59e0b", border: "1px solid #f59e0b50", borderRadius: 4, padding: "1px 5px" }}>AJUSTE</span>}
                           </td>
                           <td style={{ padding: "10px 12px 10px 0", fontWeight: 500 }}>{e.proveedor || "—"}</td>
                           <td style={{ padding: "10px 12px 10px 0", color: "#71717a" }}>{e.factura || "—"}</td>
@@ -1308,11 +1263,11 @@ export default function DieselControl() {
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {/* Encabezado solo visible en PDF */}
             <div id="pdf-header" style={{ display: "none" }}>
-              <div style={{ fontSize: 20, fontWeight: 800 }}>GRUPO CEBALLOS — CONTROL DE DIESEL</div>
-              <div style={{ fontSize: 12, color: "#444", marginTop: 4 }}>Reporte generado el {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</div>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>🌾 Grupo Ceballos — Control de Diesel</div>
+              <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>Reporte generado el {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</div>
             </div>
             {/* Botones exportar PDF */}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }} data-noprint>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }} data-noprint>
               {[
                 { label: "📄 Rendimiento", tipo: "rendimiento", title: "Tractores, cosechadoras y camiones — sin diésel" },
                 { label: "⛽ Diésel", tipo: "diesel", title: "Desglose completo de ciclos y saldo de diésel" },
@@ -1321,7 +1276,7 @@ export default function DieselControl() {
                   document.body.setAttribute("data-print", tipo);
                   window.print();
                   setTimeout(() => document.body.removeAttribute("data-print"), 500);
-                }} style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #1d4ed840", borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                }} style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #1d4ed840", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                   {label}
                 </button>
               ))}
@@ -1341,7 +1296,7 @@ export default function DieselControl() {
 
             {/* Tractores: L/hr por trabajo */}
             <div id="seccion-tractores" style={S.card}>
-              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚜 Tractores y Cosechadoras — L/hr por trabajo</div>
+              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🚜 Tractores y Trilladoras — L/hr por trabajo</div>
               <div style={{ fontSize: 12, color: "#52525b", marginBottom: 16 }}>Rendimiento de cada unidad desglosado por tipo de trabajo.</div>
               {rendTractoresPorTrabajo.length === 0
                 ? <div style={{ color: "#52525b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Sin datos suficientes. Registra consumos con horómetro.</div>
@@ -1379,14 +1334,19 @@ export default function DieselControl() {
               }
             </div>
 
-            {/* Trilladoras y Camiones — dentro del mismo reporte de rendimiento */}
+            {/* Trilladoras y Camiones */}
             <div id="seccion-trilladoras-camiones">
               <TrilladorasHaCard consumos={consumos} />
-              <CamionesViajeCard consumos={consumos} />
+              <div style={{ marginTop: 14 }}>
+                <CamionesViajeCard consumos={consumos} />
+              </div>
             </div>
 
-            {/* Diésel: solo ciclo actual — reporte separado */}
-            <div id="seccion-diesel"><CiclosCargaCard consumos={consumos} entradas={entradas} soloActual={true} /></div>
+            {/* Sección Diésel — solo último ciclo */}
+            <div id="seccion-diesel">
+              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid #27272a" }}>⛽ Ciclos de diésel — Saldo actual</div>
+              <CiclosCargaCard consumos={consumos} entradas={entradas} soloActual={false} />
+            </div>
 
             {/* Balance detallado — oculto en PDF */}
             <div id="balance-detallado" style={S.card}>

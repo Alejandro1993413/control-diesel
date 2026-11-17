@@ -45,7 +45,7 @@ const CAMIONES_REPORTE = [
   "Camion algodonero #1"
 ];
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-n253kgE-YCinC5Hbole9ETgvm3fcbWKmBqBx0QTqxXnbMllnDTbJHBPIwI9L2K7d/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxH2lZn2BBeQasU7VlbR3F0nVS_bErNO9PkTKS5vwGv0EQXbat0RcNCJU45ZWW_uuiu/exec";
 
 function tieneHorometro(u) { return CON_HOROMETRO.includes(u); }
 function tieneHectareas(u) { return CON_HECTAREAS.includes(u); }
@@ -593,6 +593,77 @@ export default function DieselControl() {
     }));
   }, [consumos]);
 
+  // ── Alertas de anomalías ──────────────────────────────────
+  const alertas = useMemo(() => {
+    const resultado = [];
+    const LPH_MAX = 20;       // L/hr: por encima es sospechoso
+    const LITROS_MULT = 2.0;  // veces el promedio: carga excesiva
+
+    // Promedio de litros por registro para cada unidad
+    const promedioLitros = {};
+    const mapaUnidad = {};
+    consumos.forEach(c => {
+      if (!mapaUnidad[c.unidad]) mapaUnidad[c.unidad] = [];
+      mapaUnidad[c.unidad].push(Number(c.litros || 0));
+    });
+    Object.entries(mapaUnidad).forEach(([u, arr]) => {
+      promedioLitros[u] = arr.reduce((s, v) => s + v, 0) / arr.length;
+    });
+
+    consumos.forEach(c => {
+      const litros = Number(c.litros || 0);
+      const horas  = c.horas !== "N/A" && c.horas ? Number(c.horas) : null;
+      const lph    = horas && horas > 0 ? litros / horas : null;
+      const prom   = promedioLitros[c.unidad] || 0;
+
+      // Alerta: L/hr muy alto (posible fuga mecánica o error de registro)
+      if (lph !== null && lph > LPH_MAX) {
+        resultado.push({
+          tipo: "lph",
+          nivel: lph > 25 ? "rojo" : "naranja",
+          fecha: c.fecha,
+          unidad: c.unidad,
+          litros,
+          horas,
+          lph: lph.toFixed(1),
+          msg: `Rendimiento alto: ${lph.toFixed(1)} L/hr (límite ${LPH_MAX})`,
+          id: c.id,
+        });
+      }
+
+      // Alerta: carga mucho mayor al promedio (posible robo o error)
+      if (prom > 0 && litros > prom * LITROS_MULT && mapaUnidad[c.unidad].length >= 3) {
+        resultado.push({
+          tipo: "litros",
+          nivel: litros > prom * 3 ? "rojo" : "naranja",
+          fecha: c.fecha,
+          unidad: c.unidad,
+          litros,
+          promedio: prom.toFixed(0),
+          msg: `Carga inusual: ${litros} L (promedio ${prom.toFixed(0)} L)`,
+          id: c.id,
+        });
+      }
+
+      // Alerta: litros registrados sin horas (N/A) en unidad con horómetro
+      if (tieneHorometro(c.unidad) && c.horas === "N/A") {
+        resultado.push({
+          tipo: "na",
+          nivel: "gris",
+          fecha: c.fecha,
+          unidad: c.unidad,
+          litros,
+          msg: `Sin horas registradas (N/A) — no se puede calcular rendimiento`,
+          id: c.id,
+        });
+      }
+    });
+
+    // Ordenar: rojos primero, luego naranjas, luego grises; dentro de cada grupo más reciente primero
+    const orden = { rojo: 0, naranja: 1, gris: 2 };
+    return resultado.sort((a, b) => orden[a.nivel] - orden[b.nivel] || String(b.fecha).localeCompare(String(a.fecha)));
+  }, [consumos]);
+
   // Auto-fill horómetro anterior
   function getUltimoHorometro(unidad) {
     const regs = consumos
@@ -832,6 +903,44 @@ export default function DieselControl() {
                 <span>0 L</span><span>{totalEntradas.toLocaleString()} L</span>
               </div>
             </div>
+
+            {/* ⚠️ ALERTAS */}
+            {alertas.length > 0 && (
+              <div style={{ background: "#18181b", borderRadius: 16, padding: "20px 24px", border: "1px solid #ef444430" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "#ef4444" }}>⚠️ Alertas de anomalías</div>
+                  <div style={{ fontSize: 11, color: "#71717a" }}>{alertas.filter(a => a.nivel !== "gris").length} sospechosas · {alertas.filter(a => a.nivel === "gris").length} sin horas</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {alertas.map((a, i) => {
+                    const colores = {
+                      rojo:    { bg: "#1c0000", border: "#ef444440", text: "#fca5a5", icon: "🔴" },
+                      naranja: { bg: "#1c1000", border: "#f9731640", text: "#fdba74", icon: "🟠" },
+                      gris:    { bg: "#18181b", border: "#3f3f4660", text: "#71717a", icon: "⚪" },
+                    };
+                    const c = colores[a.nivel];
+                    return (
+                      <div key={`${a.id}-${a.tipo}`} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 14 }}>{c.icon}</span>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.unidad}</div>
+                            <div style={{ fontSize: 11, color: "#71717a", marginTop: 1 }}>{a.msg}</div>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                          <div style={{ fontSize: 11, color: "#52525b" }}>{formatDate(a.fecha)}</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{a.litros} L{a.lph ? ` · ${a.lph} L/hr` : ""}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 10, color: "#3f3f46", marginTop: 10 }}>
+                  Umbrales: &gt;{20} L/hr o carga &gt;2× el promedio de la unidad (mín. 3 registros). Revisa y confirma con el operador.
+                </div>
+              </div>
+            )}
 
             {rendimientos.length > 0 && (
               <div style={S.card}>

@@ -45,7 +45,7 @@ const CAMIONES_REPORTE = [
   "Camion algodonero #1"
 ];
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxH2lZn2BBeQasU7VlbR3F0nVS_bErNO9PkTKS5vwGv0EQXbat0RcNCJU45ZWW_uuiu/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-n253kgE-YCinC5Hbole9ETgvm3fcbWKmBqBx0QTqxXnbMllnDTbJHBPIwI9L2K7d/exec";
 
 function tieneHorometro(u) { return CON_HOROMETRO.includes(u); }
 function tieneHectareas(u) { return CON_HECTAREAS.includes(u); }

@@ -286,8 +286,9 @@ function CiclosCargaCard({ consumos, entradas, soloActual = false }) {
       const diaFin = gruposPorDia[idx + 1] ? gruposPorDia[idx + 1].dia : null;
 
       const consumosCiclo = consumos.filter(c => {
-        if (c.cicloId === diaInicio) return true;
-        if (c.cicloId) return false;
+        const cicloIdNorm = toDateStr(c.cicloId) || c.cicloId || "";
+        if (cicloIdNorm === diaInicio) return true;
+        if (cicloIdNorm) return false;
         const dc = toDateStr(c.fecha);
         return dc >= diaSiguiente && (diaFin === null || dc < diaFin);
       });

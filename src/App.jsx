@@ -522,10 +522,42 @@ export default function DieselControl() {
   const totalEntradas = entradas.filter(e => !e.esAjuste).reduce((s, e) => s + Number(e.litros), 0);
   const totalConsumo  = consumos.reduce((s, c) => s + Number(c.litros), 0);
   const saldo = totalEntradas - totalConsumo;
-  const cicloActual = ciclos.find(c => c.esActual);
-  const saldoTanque = cicloActual ? cicloActual.saldo : saldo;
-  const pctConsumo = cicloActual && cicloActual.grupo.litros > 0
-    ? Math.min(100, (cicloActual.totalConsumo / cicloActual.grupo.litros) * 100)
+  // Saldo del ciclo actual (última carga, excluyendo ajustes)
+  const saldoTanque = useMemo(() => {
+    const cargasOrdenadas = entradas
+      .filter(e => !e.esAjuste)
+      .map(e => toDateStr(e.fecha))
+      .filter(Boolean)
+      .sort();
+    if (cargasOrdenadas.length === 0) return saldo;
+    const ultimaCarga = cargasOrdenadas[cargasOrdenadas.length - 1];
+    const penultimaCarga = cargasOrdenadas[cargasOrdenadas.length - 2] || null;
+    const litrosCarga = entradas
+      .filter(e => !e.esAjuste && toDateStr(e.fecha) === ultimaCarga)
+      .reduce((s, e) => s + Number(e.litros || 0), 0);
+    const diaSiguiente = (() => {
+      const d = new Date(ultimaCarga + "T12:00:00");
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().slice(0, 10);
+    })();
+    const consumosCiclo = consumos.filter(c => {
+      const cicloIdNorm = toDateStr(c.cicloId) || c.cicloId || "";
+      if (cicloIdNorm === ultimaCarga) return true;
+      if (cicloIdNorm) return false;
+      const dc = toDateStr(c.fecha);
+      return dc >= diaSiguiente;
+    });
+    const totalConsumoActual = consumosCiclo.reduce((s, c) => s + Number(c.litros || 0), 0);
+    return litrosCarga - totalConsumoActual;
+  }, [entradas, consumos, saldo]);
+  const litrosCicloActual = useMemo(() => {
+    const cargasOrdenadas = entradas.filter(e => !e.esAjuste).map(e => toDateStr(e.fecha)).filter(Boolean).sort();
+    if (cargasOrdenadas.length === 0) return totalEntradas;
+    const ultimaCarga = cargasOrdenadas[cargasOrdenadas.length - 1];
+    return entradas.filter(e => !e.esAjuste && toDateStr(e.fecha) === ultimaCarga).reduce((s, e) => s + Number(e.litros || 0), 0);
+  }, [entradas, totalEntradas]);
+  const pctConsumo = litrosCicloActual > 0
+    ? Math.min(100, ((litrosCicloActual - saldoTanque) / litrosCicloActual) * 100)
     : (totalEntradas > 0 ? Math.min(100, (totalConsumo / totalEntradas) * 100) : 0);
 
   const rendimientos = useMemo(() => {

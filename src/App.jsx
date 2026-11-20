@@ -522,7 +522,11 @@ export default function DieselControl() {
   const totalEntradas = entradas.filter(e => !e.esAjuste).reduce((s, e) => s + Number(e.litros), 0);
   const totalConsumo  = consumos.reduce((s, c) => s + Number(c.litros), 0);
   const saldo = totalEntradas - totalConsumo;
-  const pctConsumo = totalEntradas > 0 ? Math.min(100, (totalConsumo / totalEntradas) * 100) : 0;
+  const cicloActual = ciclos.find(c => c.esActual);
+  const saldoTanque = cicloActual ? cicloActual.saldo : saldo;
+  const pctConsumo = cicloActual && cicloActual.grupo.litros > 0
+    ? Math.min(100, (cicloActual.totalConsumo / cicloActual.grupo.litros) * 100)
+    : (totalEntradas > 0 ? Math.min(100, (totalConsumo / totalEntradas) * 100) : 0);
 
   const rendimientos = useMemo(() => {
     const map = {};
@@ -895,8 +899,8 @@ export default function DieselControl() {
           )}
           <button onClick={cargarDatos} style={{ background: "#27272a", border: "1px solid #3f3f46", color: "#a1a1aa", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>↻ Actualizar</button>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: "#71717a" }}>Saldo</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: saldo >= 0 ? "#10b981" : "#ef4444" }}>{saldo.toLocaleString()} L</div>
+            <div style={{ fontSize: 11, color: "#71717a" }}>Saldo tanque</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: saldoTanque >= 0 ? "#10b981" : "#ef4444" }}>{saldoTanque.toLocaleString()} L</div>
           </div>
         </div>
       </div>
@@ -934,7 +938,7 @@ export default function DieselControl() {
               {[
                 { label: "Diesel recibido",  value: `${totalEntradas.toLocaleString()} L`, sub: `${entradas.filter(e => !e.esAjuste).length} cargas`,   color: "#3b82f6", icon: "⬆" },
                 { label: "Diesel consumido", value: `${totalConsumo.toLocaleString()} L`,  sub: `${consumos.length} registros`, color: "#f59e0b", icon: "⬇" },
-                { label: "Saldo disponible", value: `${saldo.toLocaleString()} L`, sub: saldo >= 0 ? "En existencia" : "¡DÉFICIT!", color: saldo >= 100 ? "#10b981" : "#ef4444", icon: saldo >= 0 ? "✓" : "!" },
+                { label: "Saldo en tanque", value: `${saldoTanque.toLocaleString()} L`, sub: saldoTanque >= 0 ? "Carga actual" : "¡DÉFICIT!", color: saldoTanque >= 100 ? "#10b981" : "#ef4444", icon: saldoTanque >= 0 ? "✓" : "!" },
                 { label: "Unidades activas", value: rendimientos.length, sub: "con registros", color: "#8b5cf6", icon: "🚜" },
               ].map(s => (
                 <div key={s.label} style={{ background: "#18181b", borderRadius: 14, padding: "16px", border: `1px solid ${s.color}30`, position: "relative", overflow: "hidden" }}>
